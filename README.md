@@ -104,7 +104,7 @@ camera-viewer/
 │   └── requirements.txt
 ├── tools/set-password.js     # grava o hash da senha do painel
 ├── set-password.sh           # pede usuário e senha e aplica
-├── tests/, analyzer/tests/   # testes (node --test tests/ · python -m unittest discover -s analyzer/tests)
+├── tests/, analyzer/tests/   # testes (node --test tests/*.test.js · python -m unittest discover -s analyzer/tests)
 ├── backup.sh                 # backup de configuração, segredos e cadastros
 ├── config.example.json       # modelo do config.json (sem segredos)
 ├── .env.example              # modelo do .env (sem segredos)

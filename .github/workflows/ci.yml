@@ -27,7 +27,7 @@ jobs:
           node --check tools/set-password.js
 
       - name: Testes do Node (cadastro de câmeras e ao vivo)
-        run: node --test tests/
+        run: node --test tests/*.test.js
 
       - name: Script embutido da página
         run: |
