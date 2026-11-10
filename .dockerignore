@@ -1,4 +1,5 @@
 config.json
+cameras
 config.example.json
 node_modules
 Dockerfile

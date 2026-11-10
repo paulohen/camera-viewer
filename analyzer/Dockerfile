@@ -16,7 +16,7 @@ RUN python -c "from ultralytics import YOLO; YOLO('yolov8s.pt')" \
  && curl -fsSL -o sface.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
 
 WORKDIR /app
-COPY analyzer.py gate.py notify.py alerts.py retention.py garage.py ./
+COPY analyzer.py gate.py notify.py alerts.py retention.py garage.py cameras.py ./
 
 ENV HOME=/tmp YOLO_CONFIG_DIR=/tmp OPENCV_FFMPEG_CAPTURE_OPTIONS="rtsp_transport;tcp" PYTHONUNBUFFERED=1
 CMD ["python", "analyzer.py"]

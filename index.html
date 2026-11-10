@@ -10,6 +10,7 @@
     --text: #ccc; --muted: #888; --accent: #4da3ff;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
   body { display: flex; }
 
@@ -25,11 +26,28 @@
   .view.active { display: block; }
 
   /* ao vivo */
-  #live.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  #cam { max-width: 100%; max-height: 92vh; background: #000; }
+  #live.active { display: flex; flex-direction: column; }
+  .livebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 12px 16px 0; }
+  .livebar .chips { margin: 0; }
+  #liveSingle { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; }
+  #liveSingle[hidden], #grid[hidden], #liveNone[hidden] { display: none; }
+  #cam { max-width: 100%; max-height: 86vh; background: #000; }
   #status { margin-top: 8px; font-size: 14px; }
   button, select { font: inherit; }
   #status button { margin-left: 8px; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 8px; padding: 12px 16px 16px; align-content: start; }
+  .tile { margin: 0; position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; cursor: pointer; border: 1px solid var(--line); }
+  .tile img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .tile figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 6px; font-size: 13px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.75)); display: flex; align-items: center; gap: 8px; }
+  .tile .dot { width: 8px; height: 8px; border-radius: 50%; background: #4cd964; flex: none; }
+  .tile.off .dot { background: #d9534f; }
+  .tile.off::after { content: "Sem sinal"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 14px; background: rgba(0,0,0,.55); }
+  #live:fullscreen { background: #000; }
+  #liveNone, .nocam { color: var(--muted); padding: 40px 24px; text-align: center; font-size: 15px; line-height: 1.6; }
+  #liveNone a, .nocam a { color: var(--accent); }
+  .camBar { padding: 14px 24px 0; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .camBar label { display: flex; align-items: center; gap: 8px; }
+  .camtag { display: inline-block; font-size: 12px; color: #cfd8e6; }
 
   /* gravações */
   #rec { padding: 20px 24px 40px; }
@@ -140,11 +158,32 @@
   #lbOpen { bottom: 12px; right: 14px; font-size: 13px !important; }
   #lbPrev { left: 12px; top: 50%; } #lbNext { right: 12px; top: 50%; }
 
+  /* câmeras (administração) */
+  .campick .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .cform { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; margin-bottom: 10px; }
+  .cform label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .cform label[hidden] { display: none; }
+  .cform input[type=text], .cform input[type=number], .cform input[type=password], .cform select { width: 100%; background: #222; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 7px 9px; font: inherit; }
+  .cform .wide { grid-column: 1 / -1; }
+  .cform .chk { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+  .ctest { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  .ctest img { max-width: 320px; width: 100%; border-radius: 6px; background: #000; }
+  .camcard { display: flex; gap: 14px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+  .camcard .cth { flex: none; width: 160px; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px; text-align: center; }
+  .camcard .cth img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .camcard .cinfo { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; }
+  .camcard .cinfo b { font-size: 16px; color: #fff; }
+  .qrbox { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 10px 0; }
+  .qrbox img { width: 220px; height: 220px; background: #fff; border-radius: 6px; padding: 6px; }
+
   @media (max-width: 760px) {
     body { flex-direction: column; }
-    nav { width: 100%; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+    nav { width: 100%; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
     nav h1 { display: none; }
-    nav a { margin: 0; }
+    nav a { margin: 0; white-space: nowrap; }
+    .camcard { flex-direction: column; align-items: stretch; }
+    .camcard .cth { width: 100%; }
+    .camBar { padding: 12px 12px 0; }
     #rec { padding: 14px 12px 30px; }
     #list { grid-template-columns: 1fr; }
     .card .thumb { width: 150px; }
@@ -162,16 +201,26 @@
     <a href="#pessoas" id="nav-people">Pessoas</a>
     <a href="#carros" id="nav-cars">Carros</a>
     <a href="#revisar" id="nav-review">Revisar rostos<span class="badge" id="badge"></span></a>
+    <a href="#cameras" id="nav-cameras">Câmeras</a>
   </nav>
 
   <main>
     <section id="live" class="view">
-      <img id="cam" alt="Carregando câmera...">
-      <div id="status">Conectando... <button id="reload">Recarregar</button></div>
+      <div class="livebar">
+        <div class="chips campick" id="livePick"></div>
+        <button class="btn" id="fsBtn" title="Tela cheia">⛶ Tela cheia</button>
+      </div>
+      <div id="liveSingle">
+        <img id="cam" alt="Carregando câmera...">
+        <div id="status">Conectando... <button id="reload">Recarregar</button></div>
+      </div>
+      <div id="grid" hidden></div>
+      <div id="liveNone" hidden>Nenhuma câmera cadastrada.<br>Abra a aba <a href="#cameras">Câmeras</a> e adicione a primeira (IP, usuário, senha e um apelido).</div>
     </section>
 
     <section id="rec" class="view">
       <div class="bar">
+        <label>Câmera <select id="recCam"></select></label>
         <label>Dia <select id="day"></select></label>
         <button class="btn" id="refresh">Atualizar</button>
       </div>
@@ -183,7 +232,9 @@
     </section>
 
     <section id="gate" class="view">
-      <div class="gwrap">
+      <div class="camBar"><label>Câmera <select class="camSelect"></select></label><span>O portão, a calibração e os alertas abaixo valem para a câmera escolhida.</span></div>
+      <div class="nocam" data-nocam hidden>Nenhuma câmera cadastrada. Adicione uma na aba <a href="#cameras">Câmeras</a>.</div>
+      <div class="gwrap" data-percam>
         <div>
           <div id="snapbox"><img id="snap" alt="Imagem da câmera"><canvas id="roiCv"></canvas></div>
           <div class="gnote">Arraste sobre a imagem para marcar só a região do portão (verde = salva, azul = nova).</div>
@@ -230,30 +281,40 @@
     <section id="alerts" class="view">
       <div class="awrap">
         <div class="gcard">
-          <h4>Canais</h4>
+          <h4>WhatsApp e Telegram <small class="mutedc">(valem para todas as câmeras)</small></h4>
           <label class="grow">Telefone que recebe (WhatsApp) <input type="tel" id="aPhone" placeholder="+55 11 99999-9999" autocomplete="off"></label>
           <div class="chan"><b>WhatsApp (WAHA):</b> <span id="chWa">…</span><br><b>Telegram (reserva):</b> <span id="chTg">…</span></div>
-          <div class="gnote" style="margin-top:0">O WhatsApp é o canal principal. Se o envio falhar, o Telegram é usado no lugar, quando configurado.</div>
+          <div class="qrbox" id="qrBox" hidden>
+            <img id="qrImg" alt="QR code do WhatsApp">
+            <div class="gnote" style="max-width: 340px; margin: 0">No celular que vai <b>enviar</b> os alertas: WhatsApp ▸ <b>Aparelhos conectados</b> ▸ <b>Conectar um aparelho</b> e aponte a câmera para este QR code. Ele troca a cada ~20 s; esta tela atualiza sozinha.</div>
+          </div>
+          <div class="gbtns"><button class="btn ok" id="waStart" hidden>Conectar WhatsApp (mostrar QR code)</button></div>
+          <label class="grow">Avisar (por Telegram) se o WhatsApp desconectar <input type="checkbox" id="aWaOn"></label>
+          <label class="grow">…depois de quantos minutos <input type="number" id="aWaMin" min="1" step="1"></label>
+          <div class="gnote" style="margin-top:0">O WhatsApp é o canal principal. Se o envio falhar, o Telegram é usado no lugar, quando configurado. O aviso de WhatsApp desconectado só chega pelo Telegram (o WhatsApp estaria fora).</div>
           <div class="gbtns">
             <button class="btn" data-gcmd="test_alert">Testar WhatsApp</button>
             <button class="btn" data-gcmd="test_telegram">Testar Telegram</button>
           </div>
+          <div class="gnote">O teste é enviado com a foto da câmera escolhida abaixo e leva o apelido dela.</div>
         </div>
-        <div class="gcard">
-          <h4>Pessoa desconhecida (com foto)</h4>
-          <label class="grow">Alerta ligado <input type="checkbox" id="aUnkOn"></label>
-          <label class="grow">Das <input type="time" id="aUnkFrom"></label>
-          <label class="grow">Até <input type="time" id="aUnkTo"></label>
-          <label class="grow">Intervalo mínimo entre alertas (min) <input type="number" id="aUnkCool" min="0" step="1"></label>
-          <label class="grow">Incluir pessoa com rosto não visível <input type="checkbox" id="aUnkNoFace"></label>
-          <div class="gnote" style="margin-top:0">Vale só dentro do horário (pode virar a meia-noite). "Rosto não visível" gera muitos avisos com a câmera alta, pois moradores também aparecem com o rosto cortado.</div>
-        </div>
-        <div class="gcard">
-          <h4>Saúde do sistema</h4>
-          <label class="grow">Avisos ligados <input type="checkbox" id="aHealthOn"></label>
-          <label class="grow">Câmera sem sinal após (min) <input type="number" id="aCamMin" min="1" step="1"></label>
-          <label class="grow">WhatsApp desconectado após (min) <input type="number" id="aWaMin" min="1" step="1"></label>
-          <div class="gnote" style="margin-top:0">O aviso de WhatsApp desconectado só chega pelo Telegram (o WhatsApp estaria fora).</div>
+        <div class="camBar" style="padding: 0 0 12px"><label>Câmera <select class="camSelect"></select></label><span>Os alertas abaixo valem só para a câmera escolhida.</span></div>
+        <div class="nocam" data-nocam hidden>Nenhuma câmera cadastrada. Adicione uma na aba <a href="#cameras">Câmeras</a>.</div>
+        <div data-percam>
+          <div class="gcard">
+            <h4>Pessoa desconhecida (com foto)</h4>
+            <label class="grow">Alerta ligado <input type="checkbox" id="aUnkOn"></label>
+            <label class="grow">Das <input type="time" id="aUnkFrom"></label>
+            <label class="grow">Até <input type="time" id="aUnkTo"></label>
+            <label class="grow">Intervalo mínimo entre alertas (min) <input type="number" id="aUnkCool" min="0" step="1"></label>
+            <label class="grow">Incluir pessoa com rosto não visível <input type="checkbox" id="aUnkNoFace"></label>
+            <div class="gnote" style="margin-top:0">Vale só dentro do horário (pode virar a meia-noite). "Rosto não visível" gera muitos avisos com a câmera alta, pois moradores também aparecem com o rosto cortado.</div>
+          </div>
+          <div class="gcard">
+            <h4>Câmera sem sinal</h4>
+            <label class="grow">Avisos ligados <input type="checkbox" id="aHealthOn"></label>
+            <label class="grow">Câmera sem sinal após (min) <input type="number" id="aCamMin" min="1" step="1"></label>
+          </div>
         </div>
         <div class="gbtns" style="margin-bottom:10px"><button class="btn ok" id="aSave">Salvar</button></div>
       </div>
@@ -276,7 +337,9 @@
     </section>
 
     <section id="cars" class="view">
-      <div class="gwrap">
+      <div class="camBar"><label>Câmera <select class="camSelect"></select></label><span>Cada câmera tem a sua garagem e os seus carros cadastrados.</span></div>
+      <div class="nocam" data-nocam hidden>Nenhuma câmera cadastrada. Adicione uma na aba <a href="#cameras">Câmeras</a>.</div>
+      <div class="gwrap" data-percam>
         <div>
           <div id="carSnapBox"><img id="carSnap" alt="Imagem da câmera"><canvas id="carCv"></canvas></div>
           <div class="gnote">Arraste sobre a imagem para marcar a <b>garagem</b> (amarelo = salva, azul = nova). Carros: <span class="okc">verde = cadastrado e presente</span>, <span style="color:#ff8c00">laranja = não cadastrado</span>.</div>
@@ -321,6 +384,35 @@
       </div>
     </section>
 
+    <section id="cameras" class="view">
+      <div class="awrap" style="max-width: 1100px">
+        <p class="hint" style="font-size:13px;color:var(--muted);max-width:760px;line-height:1.5">Cadastre aqui cada câmera da rede: o <b>apelido</b> (só para você diferenciar), o <b>IP</b>, o usuário e a senha dela. Cada câmera ganha a sua própria pasta de fotos, o seu portão e a sua garagem. Use <b>Testar conexão</b> antes de salvar: ele mostra uma imagem se estiver tudo certo.</p>
+        <div class="gcard" id="camFormBox">
+          <h4 id="camFormTitle">Adicionar câmera</h4>
+          <div class="cform">
+            <label>Apelido (ex.: Garagem)<input type="text" id="cfNome" maxlength="60" autocomplete="off"></label>
+            <label>Marca / modelo<select id="cfBrand"></select></label>
+            <label data-brand-net>IP da câmera<input type="text" id="cfIp" placeholder="192.168.0.10" autocomplete="off"></label>
+            <label data-brand-net>Porta<input type="number" id="cfPort" value="554" min="1" max="65535"></label>
+            <label data-brand-net>Usuário<input type="text" id="cfUser" value="admin" autocomplete="off"></label>
+            <label data-brand-net>Senha da câmera<input type="password" id="cfPass" autocomplete="new-password"></label>
+            <label data-brand-ch>Canal<input type="number" id="cfChannel" value="1" min="1" max="64"></label>
+            <label class="wide" data-brand-custom hidden>Endereço RTSP completo (ao vivo)<input type="text" id="cfRtsp" placeholder="rtsp://usuario:senha@192.168.0.10:554/caminho" autocomplete="off"></label>
+            <label class="wide" data-brand-custom hidden>Endereço RTSP para a análise (opcional: o de maior resolução)<input type="text" id="cfRtspMain" autocomplete="off"></label>
+            <label class="chk wide"><input type="checkbox" id="cfAnalyze" checked> Analisar esta câmera (detectar pessoas, carros e animais, reconhecer rostos, portão e garagem). Desmarque para só assistir ao vivo e poupar processador.</label>
+          </div>
+          <div class="gbtns" style="margin-top:0">
+            <button class="btn" id="cfTest">Testar conexão</button>
+            <button class="btn ok" id="cfSave">Salvar câmera</button>
+            <button class="btn" id="cfCancel" hidden>Cancelar edição</button>
+          </div>
+          <div class="ctest" id="cfResult" hidden></div>
+        </div>
+        <div id="camList"></div>
+        <div id="camEmpty" class="mutedc" hidden style="padding: 14px 0">Nenhuma câmera cadastrada ainda.</div>
+      </div>
+    </section>
+
     <section id="review" class="view">
       <p class="hint">Rostos coletados automaticamente pela câmera. <b>Aprovar</b> copia a foto para o cadastro (<code>faces/&lt;nome&gt;</code>) e passa a ser usada no reconhecimento em cerca de 30 s. Para uma pessoa nova, digite o nome no campo do grupo "Desconhecidas". <b>Descartar</b> apaga a foto.</p>
       <div id="groups"></div>
@@ -355,36 +447,141 @@
     });
   }
 
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sem armazenamento: a escolha só não é lembrada */ } },
+  };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------- câmeras: lista e seletores ----------
+  let cams = [], brands = {}, curCam = null, liveMode = store.get('liveMode') || '', recCamSel = store.get('recCam') || 'all';
+
+  async function loadCameras() {
+    const d = await fetch('/api/cameras').then((r) => r.json()).catch(() => null);
+    if (!d) return false;
+    cams = d.cameras; brands = d.brands;
+    const saved = store.get('cam');
+    if (!cams.some((c) => c.id === curCam)) curCam = cams.some((c) => c.id === saved) ? saved : (cams[0] ? cams[0].id : null);
+    if (liveMode === 'grid' ? cams.length < 2 : !cams.some((c) => c.id === liveMode)) liveMode = curCam || '';
+    if (recCamSel !== 'all' && !cams.some((c) => c.id === recCamSel)) recCamSel = 'all';
+    fillCamSelects();
+    return true;
+  }
+
+  const recCamValue = () => (cams.length > 1 ? recCamSel : (cams[0] ? cams[0].id : 'all'));
+
+  function fillCamSelects() {
+    const opts = cams.map((c) => `<option value="${esc(c.id)}">${esc(c.nome)}</option>`).join('');
+    document.querySelectorAll('.camSelect').forEach((sel) => { sel.innerHTML = opts; if (curCam) sel.value = curCam; });
+    $('recCam').innerHTML = (cams.length > 1 ? '<option value="all">Todas as câmeras</option>' : '') + opts;
+    $('recCam').value = recCamValue();
+    $('recCam').closest('label').hidden = cams.length < 2;
+    document.querySelectorAll('.camBar label').forEach((l) => { l.hidden = cams.length < 2; });
+    document.querySelectorAll('[data-nocam]').forEach((el) => { el.hidden = cams.length > 0; });
+    document.querySelectorAll('[data-percam]').forEach((el) => { el.hidden = !cams.length; });
+    renderLivePick();
+  }
+
+  // Trocar a câmera em uma aba vale para as demais; o que era da câmera anterior (rascunhos, formulários) é descartado.
+  function setCam(id, quiet) {
+    if (id === curCam) return;
+    curCam = id; store.set('cam', id);
+    gate = { config: {}, state: null }; draft = null; formLoaded = false; alertsLoaded = false; lastCmdAt = 0;
+    carDraft = null; carsFormLoaded = false; carsSig = ''; carsData = { settings: {}, cars: [], captures: [], state: null }; renderCarsLive.last = 0;
+    fillCamSelects();
+    if (!quiet) startView();
+  }
+  document.addEventListener('change', (ev) => { if (ev.target.classList.contains('camSelect')) setCam(ev.target.value); });
+  $('recCam').onchange = () => { recCamSel = $('recCam').value; store.set('recCam', recCamSel); filter = null; lastSig = ''; loadDays(); };
+
   // ---------- ao vivo ----------
   const img = $('cam'), status = $('status');
-  function connect() { img.src = '/stream?t=' + Date.now(); }
+  let retry = null, gridRun = 0;
+  const camQ = (id) => 'camera=' + encodeURIComponent(id);
+  function connect() { if (curCam) img.src = '/stream?' + camQ(curCam) + '&t=' + Date.now(); }
   function disconnect() { img.removeAttribute('src'); } // fecha o stream: o ffmpeg para quando ninguém assiste
-  let retry = null;
   img.onload = () => { status.firstChild.textContent = 'Ao vivo '; };
   img.onerror = () => {
     if (!img.getAttribute('src')) return;
     status.firstChild.textContent = 'Sem sinal, tentando de novo... ';
-    clearTimeout(retry); retry = setTimeout(() => { if (view === 'live') connect(); }, 3000);
+    clearTimeout(retry); retry = setTimeout(() => { if (view === 'live' && liveMode !== 'grid') connect(); }, 3000);
   };
   $('reload').onclick = connect;
 
+  function renderLivePick() {
+    $('livePick').innerHTML = cams.map((c) => `<button class="chip ${liveMode === c.id ? 'on' : ''}" data-m="${esc(c.id)}">${esc(c.nome)}</button>`).join('')
+      + (cams.length > 1 ? `<button class="chip ${liveMode === 'grid' ? 'on' : ''}" data-m="grid">▦ Grade</button>` : '');
+  }
+  $('livePick').onclick = (ev) => { const b = ev.target.closest('.chip'); if (b) setLiveMode(b.dataset.m); };
+  function setLiveMode(m) {
+    liveMode = m; store.set('liveMode', m);
+    if (m !== 'grid') setCam(m, true);
+    renderLivePick(); startLive();
+  }
+
+  function stopLive() { gridRun++; clearTimeout(retry); disconnect(); }
+  function startLive() {
+    stopLive();
+    const none = !cams.length, grid = !none && liveMode === 'grid' && cams.length > 1;
+    $('liveNone').hidden = !none; $('liveSingle').hidden = none || grid; $('grid').hidden = !grid;
+    $('livePick').hidden = none; $('fsBtn').hidden = none;
+    if (none) return;
+    if (grid) startGrid();
+    else { status.firstChild.textContent = 'Conectando... '; connect(); }
+  }
+
+  // Grade: cada câmera pede um quadro de cada vez (/snapshot), em vez de manter uma conexão aberta por câmera. O navegador só
+  // abre ~6 conexões simultâneas por site, e várias transmissões contínuas travariam o resto do painel.
+  function startGrid() {
+    const run = ++gridRun;
+    $('grid').innerHTML = cams.map((c) => `<figure class="tile off" data-id="${esc(c.id)}" title="Clique para ver só esta câmera"><img alt="${esc(c.nome)}"><figcaption><span class="dot"></span>${esc(c.nome)}</figcaption></figure>`).join('');
+    document.querySelectorAll('#grid .tile').forEach((t) => tileLoop(t, run));
+  }
+  async function tileLoop(tile, run) {
+    const im = tile.querySelector('img'), id = tile.dataset.id;
+    let fails = 0;
+    while (run === gridRun) {
+      try {
+        const r = await fetch(`/snapshot?${camQ(id)}&t=${Date.now()}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error('sem sinal');
+        const u = URL.createObjectURL(await r.blob());
+        const old = im.src;
+        im.src = u;
+        if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+        tile.classList.remove('off'); fails = 0;
+        await sleep(120);
+      } catch (e) { tile.classList.add('off'); await sleep(Math.min(5000, 1500 + 500 * fails++)); }
+    }
+    if (im.src.startsWith('blob:')) URL.revokeObjectURL(im.src);
+  }
+  $('grid').onclick = (ev) => { const t = ev.target.closest('.tile'); if (t) setLiveMode(t.dataset.id); };
+  $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else if ($('live').requestFullscreen) $('live').requestFullscreen(); };
+
   // ---------- navegação ----------
   let view = null;
+  const VIEWS = ['live', 'rec', 'review', 'gate', 'alerts', 'people', 'cars', 'cameras'];
   function route() {
-    const next = { '#gravacoes': 'rec', '#revisar': 'review', '#portao': 'gate', '#alertas': 'alerts', '#pessoas': 'people', '#carros': 'cars' }[location.hash] || 'live';
+    const next = { '#gravacoes': 'rec', '#revisar': 'review', '#portao': 'gate', '#alertas': 'alerts', '#pessoas': 'people', '#carros': 'cars', '#cameras': 'cameras' }[location.hash] || 'live';
     if (next === view) return;
     view = next;
-    for (const v of ['live', 'rec', 'review', 'gate', 'alerts', 'people', 'cars']) {
+    for (const v of VIEWS) {
       $(v).classList.toggle('active', view === v);
       $('nav-' + v).classList.toggle('active', view === v);
     }
-    clearTimeout(retry); clearTimeout(timer); clearTimeout(gateTimer); clearTimeout(peopleTimer); clearTimeout(carsTimer);
-    if (view === 'live') connect(); else disconnect();
+    stopLive();
+    loadCameras().then(() => { if (view === next) startView(); }); // lista de câmeras sempre fresca ao trocar de aba
+  }
+  // (re)inicia o que a aba atual precisa (também ao trocar de câmera)
+  function startView() {
+    clearTimeout(retry); clearTimeout(timer); clearTimeout(gateTimer); clearTimeout(peopleTimer); clearTimeout(carsTimer); clearTimeout(camerasTimer); clearTimeout(waTimer);
+    if (view === 'live') startLive(); else stopLive();
     if (view === 'rec') loadDays();
     if (view === 'review') loadCands();
     if (view === 'gate' || view === 'alerts') loadGate();
+    if (view === 'alerts') { phoneLoaded = false; loadWa(); }
     if (view === 'people') loadPeople();
     if (view === 'cars') loadCars();
+    if (view === 'cameras') loadCamerasView();
   }
   addEventListener('hashchange', route);
 
@@ -396,14 +593,15 @@
   let peopleNames = {};
   const cap = (s) => peopleNames[s] || s.charAt(0).toUpperCase() + s.slice(1);
   const fmtDate = (d) => { const [dd, mm, yy] = d.split('-'); return `${dd}/${mm}/${yy}`; };
-  const url = (e) => `/media/${$('day').value}/${encodeURIComponent(e.file)}`;
+  const url = (e) => `/media/${encodeURIComponent(e.camera)}/${$('day').value}/${encodeURIComponent(e.file)}`;
 
   async function loadDays() {
-    Promise.all([fetch('/api/people').then((r) => r.json()), fetch('/api/cars').then((r) => r.json())]).then(([ps, cs]) => {
+    Promise.all([fetch('/api/people').then((r) => r.json()), ...cams.map((c) => fetch('/api/cars?' + camQ(c.id)).then((r) => r.json()).catch(() => null))]).then(([ps, ...css]) => {
+      const cars = css.filter(Boolean).flatMap((cs) => cs.cars);
       peopleNames = { ...Object.fromEntries(ps.filter((p) => p.nome !== p.slug).map((p) => [p.slug, p.nome])),
-        ...Object.fromEntries(cs.cars.map((c) => ['carro-' + c.slug, '🚗 ' + c.nome])), 'carro-nao-cadastrado': '🚗 Carro não cadastrado' };
+        ...Object.fromEntries(cars.map((c) => ['carro-' + c.slug, '🚗 ' + c.nome])), 'carro-nao-cadastrado': '🚗 Carro não cadastrado' };
     }).catch(() => {});
-    const days = await fetch('/api/days').then((r) => r.json()).catch(() => []);
+    const days = await fetch('/api/days?' + camQ(recCamValue())).then((r) => r.json()).catch(() => []);
     const sel = $('day'), cur = sel.value;
     sel.innerHTML = days.map((d) => `<option value="${d.date}">${fmtDate(d.date)} (${d.count})</option>`).join('');
     if (days.length) sel.value = days.some((d) => d.date === cur) ? cur : days[0].date;
@@ -423,9 +621,9 @@
     clearTimeout(timer);
     const day = $('day').value;
     if (day) {
-      const data = await fetch('/api/events?date=' + day).then((r) => r.json()).catch(() => null);
+      const data = await fetch('/api/events?' + camQ(recCamValue()) + '&date=' + day).then((r) => r.json()).catch(() => null);
       if (data) {
-        const sig = day + JSON.stringify(data);
+        const sig = recCamValue() + day + JSON.stringify(data);
         if (sig !== lastSig) { lastSig = sig; events = data; render(); }
       }
     } else { events = []; render(); }
@@ -455,7 +653,7 @@
         <div class="info">
           <div class="time">${e.time}</div>
           <div class="tags">${e.tags.map((t) => `<span class="tag ${tagClass(t)}">${esc(cap(t))}</span>`).join('')}</div>
-          <div class="meta">${e.evento ? (e.evento === 'saiu' ? '🚪 saiu da garagem<br>' : '🅿️ parou na garagem<br>') : ''}${e.seconds !== undefined ? `${e.seconds} s em cena<br>` : ''}${e.faceConf !== undefined ? `confiança do rosto: ${e.faceConf}` : ''}</div>
+          <div class="meta">${cams.length > 1 ? `<span class="camtag">📷 ${esc(e.cameraName || e.camera)}</span><br>` : ''}${e.evento ? (e.evento === 'saiu' ? '🚪 saiu da garagem<br>' : '🅿️ parou na garagem<br>') : ''}${e.seconds !== undefined ? `${e.seconds} s em cena<br>` : ''}${e.faceConf !== undefined ? `confiança do rosto: ${e.faceConf}` : ''}</div>
         </div>
       </article>`).join('');
   }
@@ -467,7 +665,7 @@
   $('list').onclick = (ev) => {
     const b = ev.target.closest('.thumb'); if (!b) return;
     const day = fmtDate($('day').value);
-    openBox(shown.map((e) => ({ src: url(e), cap: `${day} ${e.time} — ${e.tags.join(', ')}` })), +b.dataset.i);
+    openBox(shown.map((e) => ({ src: url(e), cap: `${day} ${e.time}${cams.length > 1 ? ' — ' + (e.cameraName || e.camera) : ''} — ${e.tags.join(', ')}` })), +b.dataset.i);
   };
   $('day').onchange = () => { filter = null; lastSig = ''; loadEvents(); };
   $('refresh').onclick = loadDays;
@@ -539,6 +737,7 @@
   }
 
   async function post(path, body) {
+    if (body.camera === undefined && /^\/api\/(gate|cars)\//.test(path)) body = { ...body, camera: curCam }; // portão e carros são de uma câmera
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'erro ' + r.status);
@@ -602,12 +801,14 @@
 
   async function loadGate() {
     clearTimeout(gateTimer);
-    const d = await fetch('/api/gate').then((r) => r.json()).catch(() => null);
-    if (d) { gate = d; renderGate(); }
+    if (!curCam) return;
+    const cam = curCam;
+    const d = await fetch('/api/gate?' + camQ(cam)).then((r) => r.json()).catch(() => null);
+    if (d && cam === curCam) { gate = d; renderGate(); }
     if (view === 'gate') {
       const im = new Image();
-      im.onload = () => { $('snap').src = im.src; drawRoi(); };
-      im.src = '/gate/latest.jpg?t=' + Date.now();
+      im.onload = () => { if (cam === curCam) { $('snap').src = im.src; drawRoi(); } };
+      im.src = '/gate/latest.jpg?' + camQ(cam) + '&t=' + Date.now();
     }
     if (view === 'gate' || view === 'alerts') gateTimer = setTimeout(loadGate, 3000);
   }
@@ -623,7 +824,7 @@
   }
 
   function fillAlertsForm() {
-    const c = gate.config, st = gate.state;
+    const c = gate.config;
     $('aUnkOn').checked = c.unknownEnabled !== false;
     $('aUnkFrom').value = c.unknownFrom ?? '18:00';
     $('aUnkTo').value = c.unknownTo ?? '07:00';
@@ -631,27 +832,51 @@
     $('aUnkNoFace').checked = !!c.unknownIncludeNoFace;
     $('aHealthOn').checked = c.healthEnabled !== false;
     $('aCamMin').value = c.cameraDownMin ?? 5;
-    $('aWaMin').value = c.whatsappDownMin ?? 5;
     alertsLoaded = true;
   }
 
-  function renderAlerts() {
-    if (!alertsLoaded) fillAlertsForm();
-    const st = gate.state;
-    const effPhone = gate.config.phone || (st && st.alert.phone) || '';
-    if (!phoneLoaded && effPhone) { $('aPhone').value = savedPhone = effPhone; phoneLoaded = true; }
-    if (!st) return;
-    const a = st.alert;
-    $('chWa').innerHTML = !a.whatsappConfigured ? '<span class="badc">não configurado (seção "alerts" do config.json)</span>'
-      : a.link === 'WORKING' ? '<span class="okc">conectado ✓</span>'
-      : `<span class="badc">desconectado (${esc(a.link || '?')})</span> — abra http://localhost:3000/dashboard nesta máquina e leia o QR code`;
-    $('chTg').innerHTML = a.telegramConfigured ? '<span class="okc">configurado ✓</span>'
+  // WhatsApp e ajustes globais (valem para todas as câmeras)
+  let settings = null, waSt = null, waQrAt = 0, waTimer = null;
+  async function loadWa() {
+    clearTimeout(waTimer);
+    const [s, w] = await Promise.all([fetch('/api/settings').then((r) => r.json()).catch(() => null), fetch('/api/whatsapp').then((r) => r.json()).catch(() => null)]);
+    if (s) settings = s;
+    if (w) waSt = w;
+    renderWa();
+    if (view === 'alerts') waTimer = setTimeout(loadWa, 4000);
+  }
+
+  function renderWa() {
+    if (settings && !phoneLoaded) {
+      $('aPhone').value = savedPhone = settings.phone || '';
+      $('aWaOn').checked = settings.whatsappAlertEnabled !== false;
+      $('aWaMin').value = settings.whatsappDownMin ?? 5;
+      phoneLoaded = true;
+    }
+    const w = waSt;
+    let html = '<span class="mutedc">…</span>', showQr = false, showStart = false;
+    if (w) {
+      if (!w.configured) html = '<span class="badc">não configurado (seção "alerts" do config.json: wahaUrl e wahaApiKey)</span>';
+      else if (w.status === 'WORKING') html = `<span class="okc">conectado ✓</span>${w.me ? ` (número que envia: +${esc(w.me)})` : ''}`;
+      else if (w.status === 'SCAN_QR_CODE') { html = '<span class="badc">aguardando a leitura do QR code</span>'; showQr = true; }
+      else if (w.status === 'STARTING') html = '<span class="mutedc">iniciando…</span>';
+      else if (['STOPPED', 'FAILED', 'NAO_CRIADA'].includes(w.status)) { html = `<span class="badc">desconectado (${esc(w.status)})</span>`; showStart = true; }
+      else html = `<span class="badc">${esc(w.status || '?')}</span>${w.error ? ' — ' + esc(w.error) : ''}`;
+    }
+    $('chWa').innerHTML = html;
+    $('qrBox').hidden = !showQr; $('waStart').hidden = !showStart;
+    if (showQr && Date.now() - waQrAt > 8000) { waQrAt = Date.now(); $('qrImg').src = '/api/whatsapp/qr?t=' + Date.now(); }
+    $('chTg').innerHTML = w && w.telegramConfigured ? '<span class="okc">configurado ✓</span>'
       : '<span class="mutedc">não configurado (opcional; veja o README, seção Telegram)</span>';
   }
+  $('waStart').onclick = async () => {
+    try { await post('/api/whatsapp/start', {}); toast('Iniciando o WhatsApp… o QR code aparece em instantes.'); waQrAt = 0; setTimeout(loadWa, 2500); }
+    catch (e) { toast('Não foi possível: ' + e.message); }
+  };
 
   function renderGate() {
     if (!formLoaded) fillGateForm();
-    renderAlerts();
+    if (!alertsLoaded) fillAlertsForm();
     const st = gate.state;
     const name = $('gStateName'), meta = $('gStateMeta'), warn = [];
     if (!st) {
@@ -732,22 +957,24 @@
   };
   $('aSave').onclick = async () => {
     try {
-      const r = await post('/api/gate/config', {
-        phone: $('aPhone').value.trim(),
-        unknownEnabled: $('aUnkOn').checked, unknownFrom: $('aUnkFrom').value, unknownTo: $('aUnkTo').value,
-        unknownCooldownMin: +$('aUnkCool').value, unknownIncludeNoFace: $('aUnkNoFace').checked,
-        healthEnabled: $('aHealthOn').checked, cameraDownMin: +$('aCamMin').value, whatsappDownMin: +$('aWaMin').value,
-      });
-      alertsLoaded = false;
-      if (r.phone) { $('aPhone').value = savedPhone = r.phone; phoneLoaded = true; }
-      else { phoneLoaded = false; $('aPhone').value = ''; setTimeout(loadGate, 2500); } // campo vazio: volta ao padrão do config.json
-      toast('Alertas salvos.'); loadGate();
+      const r = await post('/api/settings', { phone: $('aPhone').value.trim(), whatsappAlertEnabled: $('aWaOn').checked, whatsappDownMin: +$('aWaMin').value });
+      settings = r; $('aPhone').value = savedPhone = r.phone || ''; phoneLoaded = true;   // campo vazio: volta ao telefone do config.json
+      if (curCam) {
+        await post('/api/gate/config', {
+          unknownEnabled: $('aUnkOn').checked, unknownFrom: $('aUnkFrom').value, unknownTo: $('aUnkTo').value,
+          unknownCooldownMin: +$('aUnkCool').value, unknownIncludeNoFace: $('aUnkNoFace').checked,
+          healthEnabled: $('aHealthOn').checked, cameraDownMin: +$('aCamMin').value,
+        });
+        alertsLoaded = false;
+      }
+      toast('Alertas salvos.'); loadGate(); loadWa();
     } catch (e) { toast('Não foi possível: ' + e.message); }
   };
   document.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-gcmd]'); if (!b) return;
     const cmd = b.dataset.gcmd;
     if (cmd === 'clear_refs' && !(await ask('Remover todas as referências do portão fechado?'))) return;
+    if ((cmd === 'test_alert' || cmd === 'test_telegram') && !curCam) return toast('Cadastre uma câmera primeiro: o teste leva a foto dela.');
     if (cmd === 'test_alert') {
       const typed = $('aPhone').value.replace(/\D/g, '');
       if (typed && !savedPhone.replace(/\D/g, '').endsWith(typed)) return toast('Clique em "Salvar" antes de testar: o telefone foi alterado.');
@@ -858,11 +1085,13 @@
 
   async function loadCars() {
     clearTimeout(carsTimer);
-    const d = await fetch('/api/cars').then((r) => r.json()).catch(() => null);
-    if (d) { carsData = d; renderCarsLive(); const sig = JSON.stringify([d.cars, d.captures, d.settings]); if (sig !== carsSig && !document.activeElement.closest('#carsList, #carCaptures')) { carsSig = sig; renderCarsLists(); } }
+    if (!curCam) return;
+    const cam = curCam;
+    const d = await fetch('/api/cars?' + camQ(cam)).then((r) => r.json()).catch(() => null);
+    if (d && cam === curCam) { carsData = d; renderCarsLive(); const sig = JSON.stringify([d.cars, d.captures, d.settings]); if (sig !== carsSig && !document.activeElement.closest('#carsList, #carCaptures')) { carsSig = sig; renderCarsLists(); } }
     const im = new Image();
-    im.onload = () => { $('carSnap').src = im.src; drawCarZone(); };
-    im.src = '/gate/latest.jpg?t=' + Date.now();
+    im.onload = () => { if (cam === curCam) { $('carSnap').src = im.src; drawCarZone(); } };
+    im.src = '/gate/latest.jpg?' + camQ(cam) + '&t=' + Date.now();
     if (view === 'cars') carsTimer = setTimeout(loadCars, 3000);
   }
 
@@ -893,11 +1122,11 @@
         <label class="grow">Avisar quando parar na garagem <input type="checkbox" data-cf="alertOnPark" ${c.alertOnPark ? 'checked' : ''}></label>
         <label class="grow">Avisar quando sair da garagem <input type="checkbox" data-cf="alertOnLeave" ${c.alertOnLeave ? 'checked' : ''}></label>
         ${c.photos.length ? '' : '<div class="warn">Sem fotos: capture da câmera para o carro poder ser reconhecido.</div>'}
-        <div class="faces">${c.photos.map((f) => `<div class="fc" data-file="${esc(f)}"><button class="th" data-open><img loading="lazy" src="/car/${encodeURIComponent(c.slug)}/${encodeURIComponent(f)}" alt=""></button><div class="row"><button class="btn bad" data-cact="delphoto" title="Remover foto">✕</button></div></div>`).join('')}</div>
+        <div class="faces">${c.photos.map((f) => `<div class="fc" data-file="${esc(f)}"><button class="th" data-open><img loading="lazy" src="/car/${encodeURIComponent(curCam)}/${encodeURIComponent(c.slug)}/${encodeURIComponent(f)}" alt=""></button><div class="row"><button class="btn bad" data-cact="delphoto" title="Remover foto">✕</button></div></div>`).join('')}</div>
       </div>`).join('') : '<div class="mutedc" style="padding:8px 0">Nenhum carro cadastrado.</div>';
     const opts = cars.map((c) => `<option value="${esc(c.slug)}">${esc(c.nome)}</option>`).join('');
     $('carCaptures').innerHTML = carsData.captures.length ? carsData.captures.map((f) => `
-      <div class="fc" data-file="${esc(f)}"><button class="th" data-open><img src="/car/_capturas/${encodeURIComponent(f)}" alt=""></button>
+      <div class="fc" data-file="${esc(f)}"><button class="th" data-open><img src="/car/${encodeURIComponent(curCam)}/_capturas/${encodeURIComponent(f)}" alt=""></button>
         <div class="row col"><select class="tgt" data-csel><option value="">Qual carro?</option>${opts}<option value="__new">Novo carro…</option></select>
           <input class="tgt" data-cname placeholder="Nome do carro" hidden maxlength="60">
           <div style="display:flex;gap:6px"><button class="btn ok" data-cact="assign" style="flex:1">Cadastrar</button><button class="btn bad" data-cact="discard" title="Descartar">✕</button></div></div></div>`).join('')
@@ -970,7 +1199,123 @@
   });
   const fc_toggle = (sel) => { sel.closest('.fc').querySelector('[data-cname]').hidden = sel.value !== '__new'; };
 
-  route();
+  // ---------- câmeras (administração) ----------
+  let camerasTimer = null, editingCam = null, camSig = '';
+  const brandHasNet = (b) => b !== 'custom';
+  const brandHasChannel = (b) => ['intelbras', 'hikvision', 'reolink'].includes(b);
+
+  function applyBrand() {
+    const b = $('cfBrand').value;
+    document.querySelectorAll('[data-brand-net]').forEach((e) => { e.hidden = !brandHasNet(b); });
+    document.querySelectorAll('[data-brand-ch]').forEach((e) => { e.hidden = !brandHasChannel(b); });
+    document.querySelectorAll('[data-brand-custom]').forEach((e) => { e.hidden = b !== 'custom'; });
+  }
+  $('cfBrand').onchange = applyBrand;
+
+  function resetCamForm() {
+    editingCam = null;
+    $('cfNome').value = ''; $('cfIp').value = ''; $('cfPort').value = 554; $('cfUser').value = 'admin'; $('cfPass').value = ''; $('cfChannel').value = 1;
+    $('cfPass').placeholder = ''; $('cfRtsp').value = ''; $('cfRtspMain').value = ''; $('cfAnalyze').checked = true;
+    $('cfBrand').value = 'intelbras'; applyBrand();
+    $('camFormTitle').textContent = 'Adicionar câmera';
+    $('cfSave').textContent = 'Salvar câmera'; $('cfCancel').hidden = true; $('cfResult').hidden = true;
+  }
+
+  function startEditCam(id) {
+    const c = cams.find((x) => x.id === id); if (!c) return;
+    resetCamForm();
+    editingCam = id;
+    $('cfNome').value = c.nome; $('cfBrand').value = c.brand; $('cfIp').value = c.ip; $('cfPort').value = c.port; $('cfUser').value = c.user;
+    $('cfChannel').value = c.channel; $('cfAnalyze').checked = c.analyze;
+    $('cfPass').placeholder = c.hasPassword ? '(mantida: digite só para trocar)' : '';
+    $('cfRtsp').value = c.rtspUrl; $('cfRtspMain').value = c.analyzerRtspUrl;
+    applyBrand();
+    $('camFormTitle').textContent = `Editar câmera: ${c.nome}`;
+    $('cfSave').textContent = 'Salvar alterações'; $('cfCancel').hidden = false;
+    $('camFormBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  $('cfCancel').onclick = resetCamForm;
+
+  function camFormBody() {
+    const b = $('cfBrand').value;
+    const body = { id: editingCam || undefined, nome: $('cfNome').value.trim(), brand: b, analyze: $('cfAnalyze').checked };
+    if (b === 'custom') { body.rtspUrl = $('cfRtsp').value.trim(); body.analyzerRtspUrl = $('cfRtspMain').value.trim(); }
+    else { Object.assign(body, { ip: $('cfIp').value.trim(), port: $('cfPort').value, user: $('cfUser').value.trim(), password: $('cfPass').value, channel: $('cfChannel').value }); }
+    return body;
+  }
+
+  $('cfTest').onclick = async () => {
+    const box = $('cfResult'); box.hidden = false; box.textContent = 'Testando a conexão… (pode levar até 15 s)';
+    $('cfTest').disabled = true;
+    try {
+      const r = await post('/api/cameras/test', camFormBody());
+      box.innerHTML = r.ok ? `<img src="${r.image}" alt="Imagem da câmera"><div class="okc">✓ Conectou em ${(r.ms / 1000).toFixed(1)} s. Se a imagem é a da câmera certa, clique em salvar.</div>`
+        : `<div class="badc">✕ ${esc(r.error)}</div>`;
+    } catch (e) { box.innerHTML = `<div class="badc">✕ ${esc(e.message)}</div>`; }
+    $('cfTest').disabled = false;
+  };
+
+  $('cfSave').onclick = async () => {
+    try {
+      const wasNew = !editingCam;
+      const r = await post('/api/cameras/save', camFormBody());
+      toast(wasNew ? `Câmera "${r.camera.nome}" cadastrada. A análise começa em alguns segundos.` : 'Câmera atualizada.');
+      resetCamForm(); await loadCameras(); camSig = ''; renderCamList();
+    } catch (e) { toast('Não foi possível: ' + e.message); }
+  };
+
+  function camStatus(c) {
+    if (!c.enabled) return '<span class="mutedc">desativada</span>';
+    if (!c.analyze) return '<span class="mutedc">só ao vivo (sem análise)</span>';
+    if (c.analyzerAge === null) return '<span class="warn">aguardando o analyzer…</span>';
+    return c.analyzerAge <= 30 ? '<span class="okc">● análise funcionando</span>' : `<span class="badc">● sem sinal da análise há ${fmtDur(c.analyzerAge)}</span> (câmera fora do ar?)`;
+  }
+
+  function renderCamList() {
+    $('camEmpty').hidden = cams.length > 0;
+    const sig = JSON.stringify(cams.map(({ analyzerAge, ...rest }) => rest));
+    if (sig === camSig) { cams.forEach((c) => { const el = document.querySelector(`[data-cs="${c.id}"]`); if (el) el.innerHTML = camStatus(c); }); return; } // só o estado muda: não pisca as miniaturas
+    camSig = sig;
+    $('camList').innerHTML = cams.map((c) => `
+      <div class="camcard" data-id="${esc(c.id)}">
+        <div class="cth"><img data-th src="/gate/latest.jpg?${camQ(c.id)}&t=${Date.now()}" alt=""></div>
+        <div class="cinfo">
+          <b>${esc(c.nome)}</b> <small class="mutedc">(pasta: ${esc(c.id)})</small><br>
+          <span class="mutedc">${esc(brands[c.brand] || c.brand)}${c.brand === 'custom' ? '' : ` · ${esc(c.ip)}:${c.port}`}</span><br>
+          <span data-cs="${esc(c.id)}">${camStatus(c)}</span>
+        </div>
+        <div class="gbtns" style="margin:0">
+          <button class="btn" data-ccact="live">Ver ao vivo</button>
+          <button class="btn" data-ccact="edit">Editar</button>
+          <button class="btn bad" data-ccact="del">Remover</button>
+        </div>
+      </div>`).join('');
+  }
+  $('camList').addEventListener('error', (ev) => { if (ev.target.matches('img[data-th]')) ev.target.parentNode.textContent = 'sem imagem ainda'; }, true);
+  $('camList').addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-ccact]'); if (!b) return;
+    const id = b.closest('.camcard').dataset.id, c = cams.find((x) => x.id === id);
+    if (b.dataset.ccact === 'edit') startEditCam(id);
+    else if (b.dataset.ccact === 'live') { setLiveMode(id); location.hash = '#ao-vivo'; }
+    else if (b.dataset.ccact === 'del') {
+      if (!(await ask(`Remover a câmera "${c.nome}"? Ela deixa de aparecer e de ser analisada. As fotos já gravadas NÃO são apagadas: continuam na pasta cameraImages/${c.id}.`))) return;
+      try {
+        await post('/api/cameras/delete', { id });
+        if (editingCam === id) resetCamForm();
+        toast(`Câmera "${c.nome}" removida.`); await loadCameras(); camSig = ''; renderCamList();
+      } catch (e) { toast('Não foi possível: ' + e.message); }
+    }
+  });
+
+  async function loadCamerasView() {
+    clearTimeout(camerasTimer);
+    if (!$('cfBrand').options.length) { $('cfBrand').innerHTML = Object.entries(brands).map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join(''); applyBrand(); }
+    renderCamList();
+    if (view === 'cameras') camerasTimer = setTimeout(async () => { await loadCameras(); loadCamerasView(); }, 5000);
+  }
+
+  // Instalação nova (sem câmeras): leva direto para o cadastro.
+  loadCameras().then(() => { if (!cams.length && !location.hash) location.hash = '#cameras'; route(); });
 </script>
 </body>
 </html>
