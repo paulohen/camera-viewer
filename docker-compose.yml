@@ -1,8 +1,9 @@
-# Camera Viewer: 3 serviços. Veja o README.md para instalar em outro servidor.
+# Camera Viewer: 3 serviços (+ VPN opcional). Veja o README.md e o GUIA-INSTALACAO.md para instalar em outro servidor.
 # Variáveis (arquivo .env): CAMERA_IMAGES_DIR (pasta das fotos) e UID_GID (dono das pastas, "id -u:id -g").
 
 services:
-  # Painel web (porta 8090): câmera ao vivo, gravações, alertas, portão e revisão de rostos.
+  # Painel web (porta 8090): câmeras ao vivo (uma ou em grade), gravações, alertas, portão, carros e revisão de rostos.
+  # As câmeras são cadastradas no próprio painel (aba Câmeras): ficam em ./cameras/cameras.json.
   camera-viewer:
     build: .
     container_name: camera-viewer
@@ -12,6 +13,11 @@ services:
       - "8090:8090"
     volumes:
       - ./config.json:/app/config.json:ro
+      - type: bind                          # câmeras cadastradas (com senhas) e ajustes: o painel grava aqui
+        source: ./cameras
+        target: /cameras
+        bind:
+          create_host_path: false           # sem a pasta (rode ./setup.sh) o Docker a criaria como root e o painel não conseguiria gravar
       - type: bind                          # fotos (somente leitura)
         source: ${CAMERA_IMAGES_DIR:-./cameraImages}
         target: /data
@@ -21,9 +27,10 @@ services:
       - ./faces:/faces                      # aprovar um candidato copia a foto para cá
       - ./faces_candidates:/candidates      # e remove de lá
       - ./cars:/cars                        # carros cadastrados e zona da garagem
-      - ./gate:/gate                        # calibração e estado do monitor do portão
+      - ./gate:/gate                        # calibração e estado do monitor do portão (uma subpasta por câmera)
 
   # Detecção (movimento, pessoas, carros, rostos), monitor do portão, alertas e limpeza de fotos.
+  # Analisa todas as câmeras cadastradas no painel, cada uma com as suas pastas.
   analyzer:
     build: ./analyzer
     container_name: camera-analyzer
@@ -34,6 +41,7 @@ services:
       OUTPUT_DIR: /data
     volumes:
       - ./config.json:/app/config.json:ro
+      - ./cameras:/app/cameras:ro           # lista de câmeras: o painel grava, o analyzer só lê (recarrega sozinho em ~5 s)
       - ./faces:/app/faces:ro
       - ./faces_candidates:/app/faces_candidates
       - ./cars:/app/cars

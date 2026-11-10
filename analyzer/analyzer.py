@@ -1,6 +1,10 @@
-# Analisa a câmera RTSP: detecta movimento, objetos (YOLO) e rostos conhecidos (YuNet + SFace)
-# e salva uma foto anotada + JSON em OUTPUT_DIR/dd-mm-yyyy/.
+# Analisa as câmeras RTSP cadastradas no painel (cameras/cameras.json): detecta movimento, objetos (YOLO) e rostos
+# conhecidos (YuNet + SFace) e salva uma foto anotada + JSON em OUTPUT_DIR/<id-da-camera>/dd-mm-yyyy/.
 # Só roda a análise pesada quando há movimento.
+#
+# Uma thread (CameraWorker) por câmera, cada uma com suas pastas, seu portão e sua garagem; os modelos (YOLO e rostos)
+# são carregados uma vez e divididos entre elas. Câmeras adicionadas, editadas ou removidas no painel valem em ~5 s,
+# sem reiniciar o contêiner.
 
 import glob
 import json
@@ -14,17 +18,17 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+import cameras
 import retention
-from alerts import Health, UnknownAlerts
+from alerts import Health, UnknownAlerts, WhatsAppHealth
 from garage import VEHICLE_CLASSES, GarageMonitor
 from gate import GateMonitor
 
 CONFIG = json.load(open(os.environ.get('CONFIG_PATH', '/app/config.json')))
-# Por padrão analisa o stream principal da câmera (subtype=0, 1080p): o sub-stream deixa o rosto pequeno demais.
-RTSP = (os.environ.get('ANALYZER_RTSP_URL') or CONFIG.get('analyzerRtspUrl')
-        or CONFIG['rtspUrl'].replace('subtype=1', 'subtype=0'))
-OUT_DIR = os.environ.get('OUTPUT_DIR', '/data')
-GATE_DIR = os.environ.get('GATE_DIR', '/app/gate')
+# O stream que cada câmera analisa (principal, 1080p: o sub-stream deixa o rosto pequeno demais) vem de cameras.json.
+OUT_DIR = os.environ.get('OUTPUT_DIR', '/data')                 # fotos: uma subpasta por câmera
+GATE_DIR = os.environ.get('GATE_DIR', '/app/gate')              # portão: uma subpasta por câmera (e faces_status.json, de todas)
+CARS_DIR = os.environ.get('CARS_DIR', '/app/cars')              # garagem e carros: uma subpasta por câmera
 FACES_DIR = os.environ.get('FACES_DIR', '/app/faces')
 CAND_DIR = os.environ.get('CANDIDATES_DIR', '/app/faces_candidates')  # recortes para revisão; NÃO entram no reconhecimento
 MODELS = '/opt/models'
@@ -60,32 +64,34 @@ def slug(s):
 
 
 class Grabber(threading.Thread):
-    """Lê o RTSP continuamente e guarda só o último quadro (evita atraso acumulado)."""
+    """Lê o RTSP continuamente e guarda só o último quadro (evita atraso acumulado). Para quando `stop` é acionado."""
 
-    def __init__(self):
+    def __init__(self, url, log, stop):
         super().__init__(daemon=True)
+        self.url, self.log, self.stop = url, log, stop
         self.lock = threading.Lock()
         self.frame = None
         self.seq = 0
 
     def run(self):
-        while True:
+        while not self.stop.is_set():
             # sem isso, um stream travado só é percebido após 30 s; com limites curtos a recuperação leva ~8-10 s
-            cap = cv2.VideoCapture(RTSP, cv2.CAP_FFMPEG, [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000, cv2.CAP_PROP_READ_TIMEOUT_MSEC, 8000])
+            cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG, [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000, cv2.CAP_PROP_READ_TIMEOUT_MSEC, 8000])
             if not cap.isOpened():
-                log('sem conexão com a câmera, tentando de novo em 5 s')
-                time.sleep(5)
+                self.log('sem conexão com a câmera, tentando de novo em 5 s')
+                self.stop.wait(5)
                 continue
-            log('conectado à câmera')
-            while True:
+            self.log('conectado à câmera')
+            while not self.stop.is_set():
                 ok, f = cap.read()
                 if not ok:
                     break
                 with self.lock:
                     self.frame, self.seq = f, self.seq + 1
             cap.release()
-            log('stream caiu, reconectando')
-            time.sleep(3)
+            if not self.stop.is_set():
+                self.log('stream caiu, reconectando')
+                self.stop.wait(3)
 
     def latest(self, last_seq):
         with self.lock:
@@ -230,11 +236,11 @@ class Track:
             self.best_key, self.best = key, {'frame': frame.copy(), 'box': self.box, 'face': face, 'conf': conf}
 
 
-def save_track(tr, label, shot=None, final=True):
-    """Grava foto + JSON. `shot` é o quadro a gravar (padrão: o melhor da passagem). Fotos de acompanhamento (final=False)
-    não contam como a foto final da passagem."""
+def save_track(tr, label, out_dir, log, shot=None, final=True):
+    """Grava foto + JSON em out_dir (a pasta da câmera). `shot` é o quadro a gravar (padrão: o melhor da passagem).
+    Fotos de acompanhamento (final=False) não contam como a foto final da passagem."""
     now = datetime.now()
-    day_dir = os.path.join(OUT_DIR, now.strftime('%d-%m-%Y'))
+    day_dir = os.path.join(out_dir, now.strftime('%d-%m-%Y'))
     os.makedirs(day_dir, exist_ok=True)
     while os.path.exists(os.path.join(day_dir, f"{now.strftime('%H-%M-%S')}_{label}.jpg")):
         now += timedelta(seconds=1)  # duas fotos no mesmo segundo com o mesmo rótulo não podem se sobrescrever
@@ -261,8 +267,8 @@ def save_track(tr, label, shot=None, final=True):
     return base + '.jpg'
 
 
-def collect_candidates(tr, faces):
-    """Ao fim da passagem, guarda até CAND_PER_TRACK recortes bons e variados em faces_candidates/<nome>/."""
+def collect_candidates(tr, faces, cam_id, log):
+    """Ao fim da passagem, guarda até CAND_PER_TRACK recortes bons e variados em faces_candidates/<nome>/ (de todas as câmeras)."""
     if tr.label != 'pessoa' or not tr.crops:
         return
     ident = tr.identity()
@@ -279,7 +285,7 @@ def collect_candidates(tr, faces):
             continue  # quase igual a algo que já temos
         os.makedirs(folder, exist_ok=True)
         now = datetime.now()
-        cv2.imwrite(os.path.join(folder, f"{now.strftime('%d-%m-%Y_%H-%M-%S')}_t{tr.id}_{saved + 1}.jpg"), c['img'],
+        cv2.imwrite(os.path.join(folder, f"{now.strftime('%d-%m-%Y_%H-%M-%S')}_{cam_id}_t{tr.id}_{saved + 1}.jpg"), c['img'],
                     [cv2.IMWRITE_JPEG_QUALITY, 95])
         faces.cand.setdefault(name, []).append(c['emb'])
         saved += 1
@@ -337,179 +343,270 @@ def match_track(tracks, label, box, used, now):
     return best
 
 
+
+
+class Shared:
+    """Modelos pesados, carregados uma vez e usados por todas as câmeras. O lock serializa a inferência: a CPU é uma só e os
+    objetos do YOLO e do OpenCV (detector/reconhecedor de rostos) não aceitam duas chamadas ao mesmo tempo."""
+
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.yolo = YOLO(os.environ.get('YOLO_MODEL', f'{MODELS}/yolov8s.pt'))
+        self.faces = Faces()
+        self.faces.load()
+        self.last_face_reload = time.time()
+
+    def reload_faces(self, now):
+        """Qualquer câmera pode chamar; só uma recarrega a cada 30 s (cadastro de rostos é comum a todas)."""
+        with self.lock:
+            if now - self.last_face_reload > 30:
+                self.last_face_reload = now
+                self.faces.load()
+
+
+class CameraWorker(threading.Thread):
+    """Analisa UMA câmera: movimento -> YOLO -> rostos, mais o portão e a garagem dela. Pastas e estado próprios."""
+
+    def __init__(self, cam, shared):
+        super().__init__(daemon=True, name=f"cam-{cam['id']}")
+        self.id, self.cam_name, self.url = cam['id'], cam['nome'], cam['url']
+        self.shared = shared
+        self.stop_event = threading.Event()
+        self.out_dir = os.path.join(OUT_DIR, self.id)
+        self.gate_dir = os.path.join(GATE_DIR, self.id)
+        self.cars_dir = os.path.join(CARS_DIR, self.id)
+
+    def log(self, *a):
+        log(f'[{self.cam_name}]', *a)
+
+    def stop(self):
+        self.stop_event.set()
+
+    def run(self):
+        try:
+            self.loop()
+        except Exception as e:  # o supervisor percebe que a thread morreu e sobe outra
+            self.log('análise da câmera parou por erro:', repr(e))
+
+    def loop(self):
+        shared, faces, yolo, lock, stopped = self.shared, self.shared.faces, self.shared.yolo, self.shared.lock, self.stop_event
+        log = self.log
+        for d in (self.out_dir, self.gate_dir, self.cars_dir):
+            os.makedirs(d, exist_ok=True)
+        gate = GateMonitor(log, self.gate_dir, self.cam_name)
+
+        def detect_vehicles(frame):
+            with lock:
+                r = yolo.predict(frame, imgsz=960, conf=0.25, classes=VEHICLE_CLASSES, agnostic_nms=True, verbose=False)[0]
+            return [[int(v) for v in b.xyxy[0].tolist()] + [float(b.conf[0]), int(b.cls[0])] for b in r.boxes]  # caixa, confiança, classe
+        garage = GarageMonitor(log, detect_vehicles, self.cars_dir, self.gate_dir, self.out_dir, self.cam_name)
+        unknown = UnknownAlerts(gate, log)
+        health = Health(gate, log)
+        grabber = Grabber(self.url, log, stopped)
+        grabber.start()
+
+        bg = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=32, detectShadows=False)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        motion_until = 0
+        tracks = {}
+        next_tid = 0
+        last_saved = {}  # rótulo -> instante; evita repetir quando o tracker troca de ID
+        last_seq = 0
+        last_purge = 0
+        period = 1.0 / ANALYZE_FPS
+        log('analisando; fotos em', self.out_dir)
+
+        def try_save(tr, label, now):
+            if tr.best is None:
+                return
+            if now - last_saved.get(label, 0) > COOLDOWN:
+                last_saved[label] = now
+                path = save_track(tr, label, self.out_dir, log)
+                try:
+                    unknown.handle(label, path, tr.first)
+                except Exception as e:  # alerta com problema não pode impedir a gravação
+                    log('erro no alerta de desconhecido:', repr(e))
+            else:
+                tr.saved_label = label  # repetido há pouco (ex.: tracker trocou de ID): dá como tratado
+
+        def review(now):
+            """Decide o que salvar de cada objeto seguido: confirmou identidade, saiu de cena ou ficou tempo demais."""
+            for tid, tr in list(tracks.items()):
+                ended = now - tr.last > TRACK_TTL
+                if tr.valid:
+                    if tr.label == 'pessoa':
+                        ident = tr.identity()
+                        if ident:
+                            label = f'pessoa-{ident}'
+                            if tr.saved_label != label:
+                                try_save(tr, label, now)
+                        elif tr.saved_label is None and (ended or (tr.faces_seen and now - tr.first > UNKNOWN_AFTER)):
+                            try_save(tr, 'pessoa-desconhecida' if tr.faces_seen else 'pessoa', now)
+                    elif tr.saved_label is None and (ended or now - tr.first >= 3):
+                        try_save(tr, tr.label, now)
+                if ended:
+                    if tr.valid or tr.photos:
+                        log(f'passagem {tr.label} #{tr.id}: {tr.hits} detecções em {tr.last - tr.first:.1f} s, {tr.photos} foto(s)')
+                    elif tr.label == 'pessoa':
+                        log(f'descartada pessoa #{tr.id}: {tr.hits} detecção(ões), confiança máxima {tr.max_conf:.2f}')
+                    try:
+                        with lock:
+                            collect_candidates(tr, faces, self.id, log)
+                    except Exception as e:
+                        log('erro ao guardar candidatos:', repr(e))
+                    del tracks[tid]
+
+        while not stopped.is_set():
+            t0 = time.time()
+            review(t0)
+            if t0 - last_purge > 6 * 3600:  # na partida e a cada 6 h
+                last_purge = t0
+                try:
+                    retention.purge(self.out_dir, int(CONFIG.get('retentionDays', 30)), log)
+                except Exception as e:
+                    log('erro na limpeza de fotos:', repr(e))
+            try:
+                health.tick(t0)
+            except Exception as e:
+                log('erro na verificação de saúde:', repr(e))
+            frame, last_seq = grabber.latest(last_seq)
+            if frame is None:
+                stopped.wait(0.1)
+                continue
+            try:
+                gate.tick(frame, t0)
+            except Exception as e:  # o monitor do portão não pode derrubar a detecção
+                log('erro no monitor do portão:', repr(e))
+            try:
+                garage.tick(frame, t0)
+            except Exception as e:  # nem o da garagem
+                log('erro no monitor da garagem:', repr(e))
+            try:
+                shared.reload_faces(t0)
+
+                h, w = frame.shape[:2]
+                small = cv2.GaussianBlur(cv2.cvtColor(cv2.resize(frame, (320, max(1, 320 * h // w))), cv2.COLOR_BGR2GRAY), (5, 5), 0)
+                mask = cv2.morphologyEx(bg.apply(small), cv2.MORPH_OPEN, kernel)
+                ratio = cv2.countNonZero(mask) / mask.size
+                if ratio > MOTION_MIN_AREA:
+                    motion_until = t0 + MOTION_HOLD
+                # pessoa ainda em cena e sem identidade confirmada: continua analisando mesmo parada
+                if any(t.label == 'pessoa' and t0 - t.last < TRACK_TTL and not t.identity() for t in tracks.values()):
+                    motion_until = max(motion_until, t0 + 1)
+                if t0 > motion_until:
+                    stopped.wait(max(0, period - (time.time() - t0)))
+                    continue
+
+                with lock:
+                    res = yolo.predict(frame, imgsz=640, conf=CONF, classes=list(CLASSES), verbose=False)[0]
+                for tr in tracks.values():
+                    tr.cur_face = None
+                detections = sorted(((float(b.conf[0]), CLASSES[int(b.cls[0])], [int(v) for v in b.xyxy[0].tolist()]) for b in res.boxes),
+                                    key=lambda d: -d[0])  # as mais confiantes escolhem primeiro
+                person_boxes = [d[2] for d in detections if d[1] == 'pessoa'] + \
+                               [t.box for t in tracks.values() if t.label == 'pessoa' and t.box and t0 - t.last <= TRACK_TTL]
+                detections = [d for d in detections if d[1] not in ANIMALS or plausible_animal(d[2], person_boxes)]
+                if detections:
+                    gate.note_activity(t0)
+                used, persons = set(), []
+                for conf, label, box in detections:
+                    tr = match_track(tracks, label, box, used, t0)
+                    if tr is None:
+                        next_tid += 1
+                        tr = tracks[next_tid] = Track(next_tid, label, t0)
+                    used.add(tr.id)
+                    tr.last, tr.hits, tr.box = t0, tr.hits + 1, box
+                    conf = round(conf, 2)
+                    tr.max_conf = max(tr.max_conf, conf)
+                    if tr.first_box is None:
+                        tr.first_box = box
+                    elif label != 'pessoa' and not tr.moved:
+                        # pessoa andando na frente de um carro parado não conta: só vale se a caixa do objeto mudou de lugar
+                        tr.moved = iou(tr.first_box, box) < 0.6
+                    tr.offer((0, conf), frame, None, conf)
+                    if label == 'pessoa':
+                        persons.append((tr, conf))
+
+                if persons:
+                    with lock:
+                        for f in faces.detect(frame):
+                            fx, fy, fw, fh = [int(v) for v in f[:4]]
+                            # só rostos inteiros (sem tocar a borda do quadro) e grandes o bastante servem para identificar
+                            if fw < MIN_FACE or fx < 2 or fy < 2 or fx + fw > w - 2 or fy + fh > h - 2:
+                                continue
+                            cx, cy = fx + fw / 2, fy + fh / 2
+                            owners = [(tr, c) for tr, c in persons if tr.box[0] <= cx <= tr.box[2] and tr.box[1] <= cy <= tr.box[3]]
+                            if not owners:
+                                continue
+                            tr, conf = min(owners, key=lambda o: (o[0].box[2] - o[0].box[0]) * (o[0].box[3] - o[0].box[1]))
+                            emb = faces.embed(frame, f)
+                            name, score = faces.identify(emb)
+                            tr.faces_seen += 1
+                            tr.add_crop(frame, f, emb, name)
+                            fbox = [fx, fy, fx + fw, fy + fh]
+                            tr.cur_face = (fbox, round(float(score), 2) if name else round(float(f[-1]), 2))
+                            if name:
+                                tr.votes.setdefault(name, []).append(float(score))
+                                tr.offer((2, float(score), fw * fh), frame, (fbox, round(float(score), 2)), conf)
+                            else:
+                                tr.offer((1, fw * fh), frame, (fbox, round(float(f[-1]), 2)), conf)
+                # fotos de acompanhamento: uma a cada SEQ_EVERY s enquanto a pessoa está em cena (a primeira sai assim que a passagem vale)
+                for tr, conf in persons:
+                    if SEQ_MAX > 0 and tr.valid and tr.seq_saved < SEQ_MAX and t0 - tr.last_seq_at >= SEQ_EVERY:
+                        tr.last_seq_at = t0
+                        tr.seq_saved += 1
+                        ident = tr.identity()
+                        save_track(tr, f'pessoa-{ident}' if ident else 'pessoa', self.out_dir, log,
+                                   {'frame': frame, 'box': tr.box, 'face': tr.cur_face, 'conf': conf}, final=False)
+                review(t0)
+            except Exception as e:  # uma falha num quadro não derruba o serviço
+                log('erro na análise:', repr(e))
+            stopped.wait(max(0, period - (time.time() - t0)))
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
-    yolo = YOLO(os.environ.get('YOLO_MODEL', f'{MODELS}/yolov8s.pt'))
-    faces = Faces()
-    faces.load()
-    gate = GateMonitor(log)
-
-    def detect_vehicles(frame):
-        r = yolo.predict(frame, imgsz=960, conf=0.25, classes=VEHICLE_CLASSES, agnostic_nms=True, verbose=False)[0]
-        return [[int(v) for v in b.xyxy[0].tolist()] + [float(b.conf[0]), int(b.cls[0])] for b in r.boxes]  # caixa, confiança, classe
-    garage = GarageMonitor(log, detect_vehicles)
-    unknown = UnknownAlerts(gate, log)
-    health = Health(gate, log)
-    grabber = Grabber()
-    grabber.start()
-
-    bg = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=32, detectShadows=False)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    motion_until = 0
-    tracks = {}
-    next_tid = 0
-    last_saved = {}  # rótulo -> instante; evita repetir quando o tracker troca de ID
-    last_seq = 0
-    last_face_reload = 0
-    last_purge = 0
-    period = 1.0 / ANALYZE_FPS
-    log('analyzer pronto; saída em', OUT_DIR)
-
-    def try_save(tr, label, now):
-        if tr.best is None:
-            return
-        if now - last_saved.get(label, 0) > COOLDOWN:
-            last_saved[label] = now
-            path = save_track(tr, label)
-            try:
-                unknown.handle(label, path, tr.first)
-            except Exception as e:  # alerta com problema não pode impedir a gravação
-                log('erro no alerta de desconhecido:', repr(e))
-        else:
-            tr.saved_label = label  # repetido há pouco (ex.: tracker trocou de ID): dá como tratado
-
-    def review(now):
-        """Decide o que salvar de cada objeto seguido: confirmou identidade, saiu de cena ou ficou tempo demais."""
-        for tid, tr in list(tracks.items()):
-            ended = now - tr.last > TRACK_TTL
-            if tr.valid:
-                if tr.label == 'pessoa':
-                    ident = tr.identity()
-                    if ident:
-                        label = f'pessoa-{ident}'
-                        if tr.saved_label != label:
-                            try_save(tr, label, now)
-                    elif tr.saved_label is None and (ended or (tr.faces_seen and now - tr.first > UNKNOWN_AFTER)):
-                        try_save(tr, 'pessoa-desconhecida' if tr.faces_seen else 'pessoa', now)
-                elif tr.saved_label is None and (ended or now - tr.first >= 3):
-                    try_save(tr, tr.label, now)
-            if ended:
-                if tr.valid or tr.photos:
-                    log(f'passagem {tr.label} #{tr.id}: {tr.hits} detecções em {tr.last - tr.first:.1f} s, {tr.photos} foto(s)')
-                elif tr.label == 'pessoa':
-                    log(f'descartada pessoa #{tr.id}: {tr.hits} detecção(ões), confiança máxima {tr.max_conf:.2f}')
-                try:
-                    collect_candidates(tr, faces)
-                except Exception as e:
-                    log('erro ao guardar candidatos:', repr(e))
-                del tracks[tid]
-
+    shared = Shared()
+    wa_health = WhatsAppHealth(log)  # o aviso de WhatsApp desconectado é um só, não um por câmera
+    workers = {}                     # id -> CameraWorker
+    retry_at = {}                    # id -> instante mínimo para tentar subir de novo uma thread que morreu
+    log('analyzer pronto; câmeras lidas de', cameras.CAMERAS_PATH)
+    announced_empty = False
     while True:
-        t0 = time.time()
-        review(t0)
-        if t0 - last_purge > 6 * 3600:  # na partida e a cada 6 h
-            last_purge = t0
-            try:
-                retention.purge(OUT_DIR, int(CONFIG.get('retentionDays', 30)), log)
-            except Exception as e:
-                log('erro na limpeza de fotos:', repr(e))
+        cams = cameras.load()
+        if cams is not None:  # None = arquivo ilegível agora: mantém o que já roda
+            wanted = {c['id']: c for c in cams}
+            if not wanted and not announced_empty:
+                log('nenhuma câmera para analisar: cadastre no painel (aba Câmeras)')
+            announced_empty = not wanted
+            for cid, w in list(workers.items()):
+                c = wanted.get(cid)
+                if c is None or c['url'] != w.url or c['nome'] != w.cam_name:   # o apelido vai nos alertas: muda => recomeça a thread
+                    log(f'câmera "{w.cam_name}" removida ou alterada: reiniciando a análise dela')
+                    w.stop()
+                    del workers[cid]
+                elif not w.is_alive():
+                    log(f'análise da câmera "{w.cam_name}" parou: nova tentativa em 10 s')
+                    del workers[cid]
+                    retry_at[cid] = time.time() + 10
+            for cid, c in wanted.items():
+                if cid in workers or time.time() < retry_at.get(cid, 0):
+                    continue
+                if c['legacy']:
+                    try:
+                        cameras.migrate_legacy(cid, OUT_DIR, GATE_DIR, CARS_DIR, [i for i in cameras.all_ids() if i != cid], log)
+                    except OSError as e:
+                        log(f'migração das pastas antigas falhou ({e!r}); câmera "{c["nome"]}" não iniciada, tentando de novo em 30 s')
+                        retry_at[cid] = time.time() + 30
+                        continue
+                workers[cid] = CameraWorker(c, shared)
+                workers[cid].start()
+                log(f'análise iniciada: "{c["nome"]}" ({cid})')
         try:
-            health.tick(t0)
+            wa_health.tick(time.time())
         except Exception as e:
-            log('erro na verificação de saúde:', repr(e))
-        frame, last_seq = grabber.latest(last_seq)
-        if frame is None:
-            time.sleep(0.1)
-            continue
-        try:
-            gate.tick(frame, t0)
-        except Exception as e:  # o monitor do portão não pode derrubar a detecção
-            log('erro no monitor do portão:', repr(e))
-        try:
-            garage.tick(frame, t0)
-        except Exception as e:  # nem o da garagem
-            log('erro no monitor da garagem:', repr(e))
-        try:
-            if t0 - last_face_reload > 30:
-                last_face_reload = t0
-                faces.load()
-
-            h, w = frame.shape[:2]
-            small = cv2.GaussianBlur(cv2.cvtColor(cv2.resize(frame, (320, max(1, 320 * h // w))), cv2.COLOR_BGR2GRAY), (5, 5), 0)
-            mask = cv2.morphologyEx(bg.apply(small), cv2.MORPH_OPEN, kernel)
-            ratio = cv2.countNonZero(mask) / mask.size
-            if ratio > MOTION_MIN_AREA:
-                motion_until = t0 + MOTION_HOLD
-            # pessoa ainda em cena e sem identidade confirmada: continua analisando mesmo parada
-            if any(t.label == 'pessoa' and t0 - t.last < TRACK_TTL and not t.identity() for t in tracks.values()):
-                motion_until = max(motion_until, t0 + 1)
-            if t0 > motion_until:
-                time.sleep(max(0, period - (time.time() - t0)))
-                continue
-
-            res = yolo.predict(frame, imgsz=640, conf=CONF, classes=list(CLASSES), verbose=False)[0]
-            for tr in tracks.values():
-                tr.cur_face = None
-            detections = sorted(((float(b.conf[0]), CLASSES[int(b.cls[0])], [int(v) for v in b.xyxy[0].tolist()]) for b in res.boxes),
-                                key=lambda d: -d[0])  # as mais confiantes escolhem primeiro
-            person_boxes = [d[2] for d in detections if d[1] == 'pessoa'] + \
-                           [t.box for t in tracks.values() if t.label == 'pessoa' and t.box and t0 - t.last <= TRACK_TTL]
-            detections = [d for d in detections if d[1] not in ANIMALS or plausible_animal(d[2], person_boxes)]
-            if detections:
-                gate.note_activity(t0)
-            used, persons = set(), []
-            for conf, label, box in detections:
-                tr = match_track(tracks, label, box, used, t0)
-                if tr is None:
-                    next_tid += 1
-                    tr = tracks[next_tid] = Track(next_tid, label, t0)
-                used.add(tr.id)
-                tr.last, tr.hits, tr.box = t0, tr.hits + 1, box
-                conf = round(conf, 2)
-                tr.max_conf = max(tr.max_conf, conf)
-                if tr.first_box is None:
-                    tr.first_box = box
-                elif label != 'pessoa' and not tr.moved:
-                    # pessoa andando na frente de um carro parado não conta: só vale se a caixa do objeto mudou de lugar
-                    tr.moved = iou(tr.first_box, box) < 0.6
-                tr.offer((0, conf), frame, None, conf)
-                if label == 'pessoa':
-                    persons.append((tr, conf))
-
-            if persons:
-                for f in faces.detect(frame):
-                    fx, fy, fw, fh = [int(v) for v in f[:4]]
-                    # só rostos inteiros (sem tocar a borda do quadro) e grandes o bastante servem para identificar
-                    if fw < MIN_FACE or fx < 2 or fy < 2 or fx + fw > w - 2 or fy + fh > h - 2:
-                        continue
-                    cx, cy = fx + fw / 2, fy + fh / 2
-                    owners = [(tr, c) for tr, c in persons if tr.box[0] <= cx <= tr.box[2] and tr.box[1] <= cy <= tr.box[3]]
-                    if not owners:
-                        continue
-                    tr, conf = min(owners, key=lambda o: (o[0].box[2] - o[0].box[0]) * (o[0].box[3] - o[0].box[1]))
-                    emb = faces.embed(frame, f)
-                    name, score = faces.identify(emb)
-                    tr.faces_seen += 1
-                    tr.add_crop(frame, f, emb, name)
-                    fbox = [fx, fy, fx + fw, fy + fh]
-                    tr.cur_face = (fbox, round(float(score), 2) if name else round(float(f[-1]), 2))
-                    if name:
-                        tr.votes.setdefault(name, []).append(float(score))
-                        tr.offer((2, float(score), fw * fh), frame, (fbox, round(float(score), 2)), conf)
-                    else:
-                        tr.offer((1, fw * fh), frame, (fbox, round(float(f[-1]), 2)), conf)
-            # fotos de acompanhamento: uma a cada SEQ_EVERY s enquanto a pessoa está em cena (a primeira sai assim que a passagem vale)
-            for tr, conf in persons:
-                if SEQ_MAX > 0 and tr.valid and tr.seq_saved < SEQ_MAX and t0 - tr.last_seq_at >= SEQ_EVERY:
-                    tr.last_seq_at = t0
-                    tr.seq_saved += 1
-                    ident = tr.identity()
-                    save_track(tr, f'pessoa-{ident}' if ident else 'pessoa',
-                               {'frame': frame, 'box': tr.box, 'face': tr.cur_face, 'conf': conf}, final=False)
-            review(t0)
-        except Exception as e:  # uma falha num quadro não derruba o serviço
-            log('erro na análise:', repr(e))
-        time.sleep(max(0, period - (time.time() - t0)))
+            log('erro na verificação do WhatsApp:', repr(e))
+        time.sleep(5)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 # ---- segredos: NUNCA versionar ----
 config.json
 .env
+cameras/
 tailscale.env
 waha_sessions/
 tailscale_state/

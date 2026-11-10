@@ -2,7 +2,7 @@
 #
 # Configuração:
 #   config.json -> "alerts": { whatsappPhone, wahaUrl, wahaApiKey, wahaSession, telegramBotToken, telegramChatId }
-#   gate.json   -> "phone": telefone de destino escolhido na página (tem prioridade sobre whatsappPhone)
+#   cameras/settings.json -> "phone": telefone de destino escolhido na página (vale para todas as câmeras; tem prioridade sobre whatsappPhone)
 # Chaves e tokens nunca vão para o log.
 
 import base64
@@ -13,20 +13,30 @@ import urllib.parse
 import urllib.request
 import uuid
 
-GATE_DIR = os.environ.get('GATE_DIR', '/app/gate')
 CONFIG_PATH = os.environ.get('CONFIG_PATH', '/app/config.json')
+SETTINGS_PATH = os.environ.get('SETTINGS_PATH', '/app/cameras/settings.json')
+
+
+def settings():
+    """Ajustes globais escolhidos na página (cameras/settings.json); vazio se não existir."""
+    try:
+        return json.load(open(SETTINGS_PATH))
+    except Exception:
+        return {}
 
 
 def alert_cfg():
-    """alerts do config.json; o telefone de destino pode ser trocado pela página (gate.json tem prioridade)."""
+    """alerts do config.json; o telefone de destino pode ser trocado pela página (settings.json tem prioridade)."""
     cfg = dict(json.load(open(CONFIG_PATH)).get('alerts', {}))
-    try:
-        phone = json.load(open(os.path.join(GATE_DIR, 'gate.json'))).get('phone')
-    except Exception:
-        phone = None
+    phone = settings().get('phone')
     if phone:
         cfg['whatsappPhone'] = phone
     return cfg
+
+
+def with_camera(text, name):
+    """Acrescenta o apelido da câmera ao aviso (com várias câmeras, o aviso precisa dizer de qual veio)."""
+    return f'{text}\n📷 {name}' if name else text
 
 
 def http(method, url, headers=None, body=None, raw=None, timeout=20):

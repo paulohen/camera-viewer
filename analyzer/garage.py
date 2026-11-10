@@ -15,12 +15,12 @@
 #
 # Limites: carros do mesmo modelo parados no mesmo lugar podem ser confundidos; a placa não é lida.
 #
-# Arquivos em CARS_DIR (compartilhado com o painel):
+# Arquivos em CARS_DIR/<id-da-camera>/ (compartilhado com o painel; uma garagem por câmera):
 #   cars.json         configuração: zona da garagem, tempos, limiar, carros e opções de aviso
 #   <slug>/*.jpg      fotos de referência de cada carro
 #   _capturas/*.jpg   recortes recém capturados, à espera de você dizer de qual carro são
 #   cmd.json          comando da página (capturar); apagado após executar
-# e em GATE_DIR: cars_state.json (estado para a página).
+# e em GATE_DIR/<id-da-camera>/: cars_state.json (estado para a página).
 
 import glob
 import json
@@ -33,9 +33,6 @@ import numpy as np
 
 import notify
 
-CARS_DIR = os.environ.get('CARS_DIR', '/app/cars')
-GATE_DIR = os.environ.get('GATE_DIR', '/app/gate')
-OUT_DIR = os.environ.get('OUTPUT_DIR', '/data')
 TICK = 4.0                 # segundos entre verificações
 LEAVE_TICKS = 3            # ciclos seguidos sem ver um carro => saiu
 # Para CAPTURAR fotos de referência vale qualquer classe de veículo (o YOLO chama o carro de "avião" nesta câmera).
@@ -139,10 +136,12 @@ class Unknown:
 
 
 class GarageMonitor:
-    def __init__(self, log, detector, clock=time.time):
-        """detector(frame) -> lista de caixas [x1,y1,x2,y2(,conf,classe)] de veículos (qualquer classe de VEHICLE_CLASSES)."""
+    def __init__(self, log, detector, cars_dir, gate_dir, out_dir, name='', clock=time.time):
+        """detector(frame) -> lista de caixas [x1,y1,x2,y2(,conf,classe)] de veículos (qualquer classe de VEHICLE_CLASSES).
+        cars_dir, gate_dir e out_dir são as pastas DESTA câmera; name é o apelido dela (vai nos avisos)."""
         self.log, self.detector, self.clock = log, detector, clock
-        os.makedirs(os.path.join(CARS_DIR, '_capturas'), exist_ok=True)
+        self.cars_dir, self.gate_dir, self.out_dir, self.name = cars_dir, gate_dir, out_dir, name
+        os.makedirs(os.path.join(self.cars_dir, '_capturas'), exist_ok=True)
         self.cfg, self.cfg_mtime = dict(DEFAULTS), None
         self.refs, self.refs_sig, self.ref_cache = {}, None, {}
         self.cars = {}             # slug -> RegCar
@@ -155,7 +154,7 @@ class GarageMonitor:
 
     # ---- configuração e referências ----
     def _load_cfg(self):
-        path = os.path.join(CARS_DIR, 'cars.json')
+        path = os.path.join(self.cars_dir, 'cars.json')
         try:
             m = os.path.getmtime(path)
         except OSError:
@@ -169,7 +168,7 @@ class GarageMonitor:
             self.log('cars.json inválido:', repr(e))
 
     def _load_refs(self):
-        files = sorted(f for f in glob.glob(os.path.join(CARS_DIR, '*', '*.*')) if '/_capturas/' not in f)
+        files = sorted(f for f in glob.glob(os.path.join(self.cars_dir, '*', '*.*')) if '/_capturas/' not in f)
         sig = [(f, os.path.getmtime(f)) for f in files]
         if sig == self.refs_sig:
             return
@@ -229,7 +228,7 @@ class GarageMonitor:
         zone = self._zone_px(w, h)
         edges = edge_map(frame)
         # o YOLO só roda quando é preciso (capturar referência ou avisar de carro desconhecido)
-        wanted = bool(self.cfg['alertUnknown']) or os.path.exists(os.path.join(CARS_DIR, 'cmd.json'))
+        wanted = bool(self.cfg['alertUnknown']) or os.path.exists(os.path.join(self.cars_dir, 'cmd.json'))
         dets = [d for d in self.detector(frame) if self._in_zone(d, w, h) and self._big_enough(d, w, h)] if wanted else []
         self._command(frame, merge_detections(dets), now)
         self._presence(frame, edges, zone, now)
@@ -334,7 +333,7 @@ class GarageMonitor:
         else:
             text = f'🚗 {nome} saiu da garagem às {hhmm}.' if slug and opts.get('alertOnLeave') else None
         if text:
-            ok, msg = notify.send(text, photo)
+            ok, msg = notify.send(notify.with_camera(text, self.name), photo)
             self.log('aviso da garagem', 'enviado' if ok else f'falhou: {msg}')
 
     def _save_event(self, kind, slug, nome, frame, box, when, label, score):
@@ -349,7 +348,7 @@ class GarageMonitor:
             cv2.putText(img, f"{nome or 'nao cadastrado'} ({'saiu' if kind == 'saiu' else 'parou'})", (box[0], max(25, box[1] - 10)),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
         try:
-            day_dir = os.path.join(OUT_DIR, when.strftime('%d-%m-%Y'))
+            day_dir = os.path.join(self.out_dir, when.strftime('%d-%m-%Y'))
             os.makedirs(day_dir, exist_ok=True)
             while os.path.exists(os.path.join(day_dir, f"{when.strftime('%H-%M-%S')}_{label}.jpg")):
                 when += timedelta(seconds=1)  # não sobrescreve uma foto do mesmo rótulo no mesmo segundo
@@ -364,7 +363,7 @@ class GarageMonitor:
 
     # ---- comandos da página ----
     def _command(self, frame, boxes, now):
-        path = os.path.join(CARS_DIR, 'cmd.json')
+        path = os.path.join(self.cars_dir, 'cmd.json')
         if not os.path.exists(path):
             return
         try:
@@ -377,7 +376,7 @@ class GarageMonitor:
             if not boxes:
                 msg = 'nenhum carro visível na zona da garagem agora'
             else:
-                folder = os.path.join(CARS_DIR, '_capturas')
+                folder = os.path.join(self.cars_dir, '_capturas')
                 existing = sorted(glob.glob(os.path.join(folder, '*.jpg')))
                 for old in existing[:max(0, len(existing) + len(boxes) - MAX_CAPTURES)]:
                     os.remove(old)
@@ -394,6 +393,6 @@ class GarageMonitor:
         cars = [{'slug': s, 'nome': self._name(s), 'present': c.state == 'present', 'score': c.score, 'since': c.since, 'box': norm(c.box)}
                 for s, c in self.cars.items()]
         unknown = [{'box': norm(u.box), 'parked': u.parked} for u in self.unknowns]
-        _write_json(os.path.join(GATE_DIR, 'cars_state.json'), {
+        _write_json(os.path.join(self.gate_dir, 'cars_state.json'), {
             'updatedAt': now, 'zoneSet': bool(self.cfg['garage']), 'cars': cars, 'unknown': unknown, 'events': self.events,
             'refs': {k: len(v) for k, v in self.refs.items()}, 'lastCommand': self.last_cmd})

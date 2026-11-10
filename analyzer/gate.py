@@ -2,7 +2,7 @@
 # Se a região deixa de se parecer com o portão fechado por tempo suficiente, considera ABERTO;
 # aberto por mais de X minutos, manda um alerta com foto (WhatsApp via WAHA; Telegram como reserva).
 #
-# Arquivos em GATE_DIR (compartilhado com o viewer):
+# Arquivos em GATE_DIR/<id-da-camera>/ (compartilhado com o viewer; um monitor por câmera):
 #   gate.json   configuração (escrita pela página): região, limiar, tempos de alerta
 #   cmd.json    comando pedido pela página (adicionar referência, testar alerta...); apagado após executar
 #   state.json  estado atual (escrito aqui, lido pela página)
@@ -21,7 +21,6 @@ import numpy as np
 
 import notify
 
-GATE_DIR = os.environ.get('GATE_DIR', '/app/gate')
 TICK = 2.0            # s entre avaliações
 SNAP_EVERY = 3.0      # s entre atualizações do latest.jpg
 SIZE = (128, 128)     # tamanho padrão da região para comparar
@@ -77,9 +76,9 @@ def _fmt_dur(sec):
     return f'{h} h {m} min'
 
 
-def latest_photo():
+def latest_photo(gate_dir):
     """Último quadro reduzido (latest.jpg) em bytes, se for recente; vai anexado aos alertas."""
-    path = os.path.join(GATE_DIR, 'latest.jpg')
+    path = os.path.join(gate_dir, 'latest.jpg')
     try:
         if time.time() - os.path.getmtime(path) < 30:
             return open(path, 'rb').read()
@@ -89,9 +88,11 @@ def latest_photo():
 
 
 class GateMonitor:
-    def __init__(self, log):
+    def __init__(self, log, gate_dir, name=''):
         self.log = log
-        os.makedirs(os.path.join(GATE_DIR, 'refs'), exist_ok=True)
+        self.dir = gate_dir
+        self.name = name          # apelido da câmera: vai nos alertas, para saber de qual câmera veio
+        os.makedirs(os.path.join(self.dir, 'refs'), exist_ok=True)
         self.cfg, self.cfg_mtime = dict(DEFAULTS), None
         self.refs = []
         self.roi_of_refs = None
@@ -113,7 +114,7 @@ class GateMonitor:
     # ---- persistência ----
     def _load_saved_state(self):
         try:
-            s = json.load(open(os.path.join(GATE_DIR, 'state.json')))
+            s = json.load(open(os.path.join(self.dir, 'state.json')))
             age = time.time() - float(s.get('updatedAt') or 0)
             if age > STATE_MAX_AGE:
                 # O analyzer ficou parado (reinício, queda): não dá para saber o que houve com o portão nesse intervalo.
@@ -129,13 +130,13 @@ class GateMonitor:
 
     def _load_refs(self):
         self.refs = []
-        for f in sorted(glob.glob(os.path.join(GATE_DIR, 'refs', 'closed_*.png'))) + sorted(glob.glob(os.path.join(GATE_DIR, 'refs', 'auto_*.png'))):
+        for f in sorted(glob.glob(os.path.join(self.dir, 'refs', 'closed_*.png'))) + sorted(glob.glob(os.path.join(self.dir, 'refs', 'auto_*.png'))):
             img = cv2.imread(f, cv2.IMREAD_GRAYSCALE)
             if img is not None:
                 self.refs.append(cv2.GaussianBlur(img, (5, 5), 0))
 
     def _load_cfg(self):
-        path = os.path.join(GATE_DIR, 'gate.json')
+        path = os.path.join(self.dir, 'gate.json')
         try:
             m = os.path.getmtime(path)
         except OSError:
@@ -148,14 +149,14 @@ class GateMonitor:
         except Exception as e:
             self.log('gate.json inválido:', repr(e))
             return
-        roi_marker = os.path.join(GATE_DIR, 'refs', 'roi.json')
+        roi_marker = os.path.join(self.dir, 'refs', 'roi.json')
         roi_saved = json.load(open(roi_marker)) if os.path.exists(roi_marker) else None
         if self.refs and roi_saved != self.cfg['roi']:
             self.log('região do portão mudou: referências antigas removidas, recalibre')
             self._clear_refs()
 
     def _clear_refs(self):
-        for f in glob.glob(os.path.join(GATE_DIR, 'refs', 'closed_*.png')) + glob.glob(os.path.join(GATE_DIR, 'refs', 'auto_*.png')):
+        for f in glob.glob(os.path.join(self.dir, 'refs', 'closed_*.png')) + glob.glob(os.path.join(self.dir, 'refs', 'auto_*.png')):
             os.remove(f)
         self.refs = []
         self.level.clear()
@@ -182,7 +183,7 @@ class GateMonitor:
 
     # ---- comandos vindos da página ----
     def _command(self, frame, now):
-        path = os.path.join(GATE_DIR, 'cmd.json')
+        path = os.path.join(self.dir, 'cmd.json')
         if not os.path.exists(path):
             return
         try:
@@ -196,11 +197,11 @@ class GateMonitor:
             if crop is None:
                 msg = 'defina e salve a região do portão primeiro'
             else:
-                files = sorted(glob.glob(os.path.join(GATE_DIR, 'refs', 'closed_*.png')))
+                files = sorted(glob.glob(os.path.join(self.dir, 'refs', 'closed_*.png')))
                 for old in files[:max(0, len(files) - MAX_REFS + 1)]:
                     os.remove(old)
-                cv2.imwrite(os.path.join(GATE_DIR, 'refs', f'closed_{int(now)}.png'), crop)
-                _write_json(os.path.join(GATE_DIR, 'refs', 'roi.json'), self.cfg['roi'])
+                cv2.imwrite(os.path.join(self.dir, 'refs', f'closed_{int(now)}.png'), crop)
+                _write_json(os.path.join(self.dir, 'refs', 'roi.json'), self.cfg['roi'])
                 self._load_refs()
                 ok, msg = True, f'referência adicionada ({len(self.refs)} no total)'
         elif cmd == 'clear_refs':
@@ -212,13 +213,13 @@ class GateMonitor:
                 msg = 'adicione ao menos uma referência de portão fechado primeiro'
             else:
                 thr = round(min(0.85, max(0.3, (0.9 + s) / 2)), 2)
-                _write_json(os.path.join(GATE_DIR, 'gate.json'), {**self.cfg, 'threshold': thr})
+                _write_json(os.path.join(self.dir, 'gate.json'), {**self.cfg, 'threshold': thr})
                 self.cfg_mtime = None
                 ok, msg = True, f'com o portão aberto a similaridade foi {s}; limiar ajustado para {thr}'
         elif cmd in ('test_alert', 'test_telegram'):
             channel = 'whatsapp' if cmd == 'test_alert' else 'telegram'
-            ok, msg = notify.send('✅ Teste do alerta: o envio por ' + ('WhatsApp' if channel == 'whatsapp' else 'Telegram') + ' está funcionando.',
-                                  latest_photo(), channels=(channel,))
+            ok, msg = notify.send(notify.with_camera('✅ Teste do alerta: o envio por ' + ('WhatsApp' if channel == 'whatsapp' else 'Telegram') + ' está funcionando.', self.name),
+                                  latest_photo(self.dir), channels=(channel,))
             msg = 'mensagem de teste enviada (com foto)' if ok else msg
         self.last_cmd = {'cmd': cmd, 'ok': ok, 'msg': msg, 'at': now}
         self.log(f'comando {cmd}: {msg}')
@@ -233,8 +234,8 @@ class GateMonitor:
         if now - self.last_snap >= SNAP_EVERY:
             self.last_snap = now
             h, w = frame.shape[:2]
-            cv2.imwrite(os.path.join(GATE_DIR, 'latest.tmp.jpg'), cv2.resize(frame, (960, max(1, 960 * h // w))), [cv2.IMWRITE_JPEG_QUALITY, 80])
-            os.replace(os.path.join(GATE_DIR, 'latest.tmp.jpg'), os.path.join(GATE_DIR, 'latest.jpg'))
+            cv2.imwrite(os.path.join(self.dir, 'latest.tmp.jpg'), cv2.resize(frame, (960, max(1, 960 * h // w))), [cv2.IMWRITE_JPEG_QUALITY, 80])
+            os.replace(os.path.join(self.dir, 'latest.tmp.jpg'), os.path.join(self.dir, 'latest.jpg'))
         self._command(frame, now)
 
         self.score = self._score(self._crop(frame))
@@ -296,10 +297,10 @@ class GateMonitor:
         crop = self._crop(frame)
         if crop is None:
             return
-        autos = sorted(glob.glob(os.path.join(GATE_DIR, 'refs', 'auto_*.png')))
+        autos = sorted(glob.glob(os.path.join(self.dir, 'refs', 'auto_*.png')))
         for old in autos[:max(0, len(autos) - AUTO_MAX + 1)]:
             os.remove(old)
-        cv2.imwrite(os.path.join(GATE_DIR, 'refs', f'auto_{int(now)}.png'), crop)
+        cv2.imwrite(os.path.join(self.dir, 'refs', f'auto_{int(now)}.png'), crop)
         self._load_refs()
         self.last_auto = now
         self.level.clear()
@@ -313,7 +314,7 @@ class GateMonitor:
         if not due or now < self.next_try:
             return
         since = datetime.fromtimestamp(self.since).strftime('%H:%M:%S')
-        ok, msg = notify.send(f'⚠️ Portão aberto há {_fmt_dur(open_for)} (desde {since}).', latest_photo())
+        ok, msg = notify.send(notify.with_camera(f'⚠️ Portão aberto há {_fmt_dur(open_for)} (desde {since}).', self.name), latest_photo(self.dir))
         if ok:
             self.alerted, self.last_alert, self.last_error = True, now, None
             self.log('alerta de portão aberto enviado')
@@ -325,7 +326,7 @@ class GateMonitor:
         was_alerted = self.alerted
         self.alerted, self.last_alert = False, 0.0
         if was_alerted and self.cfg['notifyClosed'] and self.cfg['enabled']:
-            ok, msg = notify.send('✅ Portão fechado.')
+            ok, msg = notify.send(notify.with_camera('✅ Portão fechado.', self.name))
             self.log('aviso de portão fechado', 'enviado' if ok else f'falhou: {msg}')
 
     def _write_state(self, now):
@@ -333,9 +334,9 @@ class GateMonitor:
             phone = notify.alert_cfg().get('whatsappPhone')
         except Exception:
             phone = None
-        _write_json(os.path.join(GATE_DIR, 'state.json'), {
+        _write_json(os.path.join(self.dir, 'state.json'), {
             'state': self.state, 'since': self.since, 'score': self.score, 'threshold': self.cfg['threshold'],
-            'refs': len(self.refs), 'autoRefs': len(glob.glob(os.path.join(GATE_DIR, 'refs', 'auto_*.png'))),
+            'refs': len(self.refs), 'autoRefs': len(glob.glob(os.path.join(self.dir, 'refs', 'auto_*.png'))),
             'roiSet': bool(self.cfg['roi']), 'updatedAt': now,
             'openSeconds': round(now - self.since) if self.state == 'aberto' and self.since else 0,
             'alert': {'enabled': self.cfg['enabled'], 'alerted': self.alerted,

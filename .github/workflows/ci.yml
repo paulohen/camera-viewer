@@ -22,7 +22,12 @@ jobs:
       - name: Node (servidor e ferramentas)
         run: |
           node --check server.js
+          node --check camera-registry.js
+          node --check live.js
           node --check tools/set-password.js
+
+      - name: Testes do Node (cadastro de câmeras e ao vivo)
+        run: node --test tests/
 
       - name: Script embutido da página
         run: |
@@ -33,7 +38,9 @@ jobs:
           node --check /tmp/page.js
 
       - name: Python (analyzer)
-        run: python -m py_compile analyzer/*.py
+        run: |
+          python -m py_compile analyzer/*.py
+          python -m unittest discover -s analyzer/tests
 
       - name: Shell
         run: |
@@ -46,10 +53,10 @@ jobs:
 
       - name: Nenhum segredo versionado
         run: |
-          for f in config.json .env tailscale.env; do
+          for f in config.json .env tailscale.env cameras/cameras.json cameras/settings.json; do
             if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then echo "ERRO: $f está versionado"; exit 1; fi
           done
-          if git ls-files | grep -E '^(faces|faces_candidates|cars|gate|waha_sessions|tailscale_state|cameraImages|backups)/' | grep -v 'LEIA-ME.txt'; then
+          if git ls-files | grep -E '^(faces|faces_candidates|cars|gate|cameras|waha_sessions|tailscale_state|cameraImages|backups)/' | grep -v 'LEIA-ME.txt'; then
             echo "ERRO: dados locais versionados"; exit 1
           fi
 
@@ -57,7 +64,7 @@ jobs:
         run: |
           cp .env.example .env
           cp config.example.json config.json
-          mkdir -p faces faces_candidates cars gate waha_sessions
+          mkdir -p faces faces_candidates cars gate waha_sessions cameras
           docker compose config -q
 
       - name: Construir a imagem do painel
