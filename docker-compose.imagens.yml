@@ -1,0 +1,16 @@
+# Usa as imagens PRONTAS (publicadas no ghcr.io) em vez de construir no computador.
+# Complementa o docker-compose.yml: nada é duplicado, só troca "build" por "image".
+# Ative com:  ./setup.sh --imagens   (grava COMPOSE_FILE no .env)   e depois:  docker compose pull && docker compose up -d
+# Precisa do Docker Compose 2.24 ou mais novo (por causa do "!reset").
+#
+# Variáveis opcionais (.env):
+#   CAMERA_VIEWER_REGISTRY  de onde baixar (padrão ghcr.io/paulohen)
+#   CAMERA_VIEWER_TAG       versão (padrão latest; ex.: 1.0.0 para fixar)
+
+services:
+  camera-viewer:
+    image: ${CAMERA_VIEWER_REGISTRY:-ghcr.io/paulohen}/camera-viewer-painel:${CAMERA_VIEWER_TAG:-latest}
+    build: !reset null
+  analyzer:
+    image: ${CAMERA_VIEWER_REGISTRY:-ghcr.io/paulohen}/camera-viewer-analyzer:${CAMERA_VIEWER_TAG:-latest}
+    build: !reset null

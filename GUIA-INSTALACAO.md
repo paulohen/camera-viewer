@@ -118,11 +118,25 @@ Ele **nunca sobrescreve** o que já existe, então pode rodar de novo.
 
 ## 4. Subir o sistema
 
+Há dois jeitos. Escolha **um**.
+
+**A) Imagens prontas (mais rápido, recomendado).** O painel e o analyzer são baixados já construídos do GitHub Container Registry; o WhatsApp (WAHA) também é uma imagem pronta. Não constrói nada no computador. Precisa do Docker Compose 2.24 ou mais novo (`docker compose version`).
+
+```bash
+./setup.sh --imagens     # pode rodar de novo, mesmo que já tenha rodado o ./setup.sh: só acrescenta COMPOSE_FILE ao .env
+docker compose pull
+docker compose up -d
+```
+
+Se o `pull` responder `denied` ou `unauthorized`, as imagens ainda estão privadas: quem publica deve torná-las públicas (GitHub ▸ perfil ▸ Packages ▸ cada imagem ▸ Package settings ▸ Change visibility ▸ Public; elas não têm segredos), ou você faz `docker login ghcr.io` com um token do GitHub com permissão `read:packages`. Para fixar uma versão, ponha `CAMERA_VIEWER_TAG=1.0.0` no `.env`.
+
+**B) Construir no próprio computador** (não depende de registro; serve também para testar mudanças no código):
+
 ```bash
 docker compose up -d --build
 ```
 
-A **primeira vez demora** (baixa o PyTorch, os modelos de detecção e a imagem do WhatsApp: alguns GB). Acompanhe com:
+Nos dois casos, a **primeira vez demora** (baixa o PyTorch, os modelos de detecção e a imagem do WhatsApp: alguns GB). Acompanhe com:
 
 ```bash
 docker compose logs -f
@@ -241,7 +255,7 @@ Estes passos têm abas com seletor de **Câmera** no topo: configure uma câmera
 | Ver os logs | `docker logs --tail 50 camera-analyzer` (cada linha começa com o `[apelido]` da câmera). |
 | Reiniciar | `docker compose restart analyzer camera-viewer` |
 | Parar tudo | `docker compose down` (os dados ficam) |
-| Atualizar o sistema | `./setup.sh` e depois `docker compose up -d --build` |
+| Atualizar o sistema | `./setup.sh`; depois `docker compose pull && docker compose up -d` (imagens prontas) ou `docker compose up -d --build` (construindo aqui) |
 | Fazer backup | `./backup.sh` (guarda configuração, **senhas das câmeras**, rostos e a sessão do WhatsApp; **não** guarda as fotos). Guarde o arquivo em lugar seguro. |
 | Acessar de fora de casa | VPN (Tailscale), README seção 9. **Chave nova** neste computador. Não faça redirecionamento de porta no roteador. |
 | Mudar o telefone que recebe | Aba **Alertas**. |

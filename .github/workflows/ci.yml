@@ -66,6 +66,7 @@ jobs:
           cp config.example.json config.json
           mkdir -p faces faces_candidates cars gate waha_sessions cameras
           docker compose config -q
+          docker compose -f docker-compose.yml -f docker-compose.imagens.yml config -q
 
       - name: Construir a imagem do painel
         run: docker build -t camera-viewer-painel .
