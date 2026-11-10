@@ -131,7 +131,8 @@ camera-viewer/
 - Linux com **Docker** e **Docker Compose v2** (`docker compose version`). Testado com Docker 29 e Compose 5.
 - **Atenção:** o Docker instalado por **snap** não enxerga pastas em `/tmp`. Mantenha o projeto dentro do seu `$HOME`.
 - Rede com acesso à câmera (porta RTSP 554) e à internet (baixar imagens e falar com o WhatsApp).
-- Para o desempenho que usamos: CPU com 8+ núcleos e 8+ GB de RAM, sem GPU. O consumo medido foi cerca de 14% de um núcleo parado e picos curtos quando há movimento.
+- **Python 3** (o `./setup.sh` usa para editar o `config.json`) e, para as imagens prontas, processador **x86 (amd64)** (seção 4.5).
+- CPU e memória: comece com 4 núcleos e 8 GB de RAM, sem GPU, e observe. O consumo medido (12 núcleos, 15 GB, uma câmera) foi cerca de 14% de um núcleo parado e picos curtos quando há movimento; com várias câmeras reais ainda não foi medido.
 - Espaço para as fotos (cada foto 1080p tem ~230 KB).
 - Um celular com WhatsApp (de preferência de um número **reserva**, veja a seção [Segurança](#8-segurança)).
 

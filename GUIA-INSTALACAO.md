@@ -26,6 +26,8 @@ Tempo: cerca de 30 a 60 minutos, mais o tempo de download da primeira vez (algun
 **Precisa de:**
 
 - **Linux** (Ubuntu ou Debian são os mais simples). O sistema foi desenvolvido e testado em Ubuntu. Windows e Mac **não foram testados**.
+- **Processador x86 (amd64)** se for usar as imagens prontas do passo 4A. Em computador ARM (Raspberry Pi, por exemplo) elas não funcionam: use o passo 4B (construir no próprio computador), que **não foi testado** em ARM.
+- **Python 3** instalado (o `./setup.sh` usa para editar o `config.json`). No Ubuntu já vem; confira com `python3 --version` e, se faltar, `sudo apt install python3`.
 - **Estar ligado o tempo todo** e ligado à mesma rede das câmeras (de preferência por cabo).
 - **Processador e memória.** Medido com **uma** câmera: 12 núcleos e 15 GB de RAM, com uso de cerca de 14% de um núcleo parado e picos curtos quando há movimento. Como regra prática, comece com **4 núcleos e 8 GB de RAM** e observe. **Ainda não foi medido com várias câmeras reais** ao mesmo tempo: o analyzer divide o mesmo processador entre elas (uma detecção por vez), então com muito movimento em várias câmeras cada uma é analisada com menos frequência. Câmeras que você só quer **assistir** podem ficar com *Analisar esta câmera* desmarcado (poupa processador).
 - **Disco** para as fotos: cada foto 1080p tem ~230 KB. As fotos com mais de 30 dias são apagadas sozinhas (configurável).
@@ -255,7 +257,7 @@ Estes passos têm abas com seletor de **Câmera** no topo: configure uma câmera
 | Ver os logs | `docker logs --tail 50 camera-analyzer` (cada linha começa com o `[apelido]` da câmera). |
 | Reiniciar | `docker compose restart analyzer camera-viewer` |
 | Parar tudo | `docker compose down` (os dados ficam) |
-| Atualizar o sistema | `./setup.sh`; depois `docker compose pull && docker compose up -d` (imagens prontas) ou `docker compose up -d --build` (construindo aqui) |
+| Atualizar o sistema | `git pull` (baixa o código novo: `docker-compose.yml`, `setup.sh` etc.); `./setup.sh`; depois `docker compose pull && docker compose up -d` (imagens prontas) ou `docker compose up -d --build` (construindo aqui). Se o projeto foi copiado sem o git, copie de novo os arquivos do projeto, **menos** os itens do aviso do passo 3. |
 | Fazer backup | `./backup.sh` (guarda configuração, **senhas das câmeras**, rostos e a sessão do WhatsApp; **não** guarda as fotos). Guarde o arquivo em lugar seguro. |
 | Acessar de fora de casa | VPN (Tailscale), README seção 9. **Chave nova** neste computador. Não faça redirecionamento de porta no roteador. |
 | Mudar o telefone que recebe | Aba **Alertas**. |
