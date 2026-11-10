@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validar:
+    name: Sintaxe, configuração e imagem do painel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Node (servidor e ferramentas)
+        run: |
+          node --check server.js
+          node --check tools/set-password.js
+
+      - name: Script embutido da página
+        run: |
+          python3 - <<'PY'
+          h = open('index.html').read()
+          open('/tmp/page.js', 'w').write(h[h.index('<script>') + 8:h.index('</script>')])
+          PY
+          node --check /tmp/page.js
+
+      - name: Python (analyzer)
+        run: python -m py_compile analyzer/*.py
+
+      - name: Shell
+        run: |
+          bash -n setup.sh
+          bash -n set-password.sh
+          bash -n backup.sh
+
+      - name: JSON de exemplo
+        run: python -m json.tool config.example.json > /dev/null
+
+      - name: Nenhum segredo versionado
+        run: |
+          for f in config.json .env tailscale.env; do
+            if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then echo "ERRO: $f está versionado"; exit 1; fi
+          done
+          if git ls-files | grep -E '^(faces|faces_candidates|cars|gate|waha_sessions|tailscale_state|cameraImages|backups)/' | grep -v 'LEIA-ME.txt'; then
+            echo "ERRO: dados locais versionados"; exit 1
+          fi
+
+      - name: docker-compose.yml com os arquivos de exemplo
+        run: |
+          cp .env.example .env
+          cp config.example.json config.json
+          mkdir -p faces faces_candidates cars gate waha_sessions
+          docker compose config -q
+
+      - name: Construir a imagem do painel
+        run: docker build -t camera-viewer-painel .

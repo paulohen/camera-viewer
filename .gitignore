@@ -1,0 +1,23 @@
+# ---- segredos: NUNCA versionar ----
+config.json
+.env
+tailscale.env
+waha_sessions/
+tailscale_state/
+
+# ---- dados gerados / pessoais (fotos de rostos, carros, estado do portão, fotos das ocorrências) ----
+cameraImages/
+backups/
+*.tar.gz
+gate/
+cars/
+faces/*
+!faces/LEIA-ME.txt
+faces_candidates/*
+!faces_candidates/LEIA-ME.txt
+
+# ---- lixo de desenvolvimento ----
+__pycache__/
+node_modules/
+*.log
+.DS_Store

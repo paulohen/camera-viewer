@@ -1,0 +1,80 @@
+# Camera Viewer: 3 serviços. Veja o README.md para instalar em outro servidor.
+# Variáveis (arquivo .env): CAMERA_IMAGES_DIR (pasta das fotos) e UID_GID (dono das pastas, "id -u:id -g").
+
+services:
+  # Painel web (porta 8090): câmera ao vivo, gravações, alertas, portão e revisão de rostos.
+  camera-viewer:
+    build: .
+    container_name: camera-viewer
+    restart: unless-stopped
+    user: "${UID_GID:-1000:1000}"
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - type: bind                          # fotos (somente leitura)
+        source: ${CAMERA_IMAGES_DIR:-./cameraImages}
+        target: /data
+        read_only: true
+        bind:
+          create_host_path: false           # SSD desmontado => não sobe (em vez de criar pasta vazia no disco errado)
+      - ./faces:/faces                      # aprovar um candidato copia a foto para cá
+      - ./faces_candidates:/candidates      # e remove de lá
+      - ./cars:/cars                        # carros cadastrados e zona da garagem
+      - ./gate:/gate                        # calibração e estado do monitor do portão
+
+  # Detecção (movimento, pessoas, carros, rostos), monitor do portão, alertas e limpeza de fotos.
+  analyzer:
+    build: ./analyzer
+    container_name: camera-analyzer
+    restart: unless-stopped
+    user: "${UID_GID:-1000:1000}"
+    environment:
+      TZ: America/Sao_Paulo                 # define o horário do alerta de desconhecido e o nome das pastas dd-mm-yyyy
+      OUTPUT_DIR: /data
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./faces:/app/faces:ro
+      - ./faces_candidates:/app/faces_candidates
+      - ./cars:/app/cars
+      - ./gate:/app/gate
+      - type: bind                          # fotos (leitura e escrita)
+        source: ${CAMERA_IMAGES_DIR:-./cameraImages}
+        target: /data
+        bind:
+          create_host_path: false
+
+  # WhatsApp (WAHA, engine NOWEB: sem navegador, leve). Conecte lendo o QR code em http://localhost:3000/dashboard
+  waha:
+    image: devlikeapro/waha:noweb
+    container_name: camera-waha
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./waha_sessions:/app/.sessions      # mantém o WhatsApp conectado após reiniciar
+    ports:
+      - "127.0.0.1:3000:3000"               # painel (QR code) só acessível nesta máquina
+
+  # VPN (Tailscale): acesso ao painel de fora de casa, sem abrir porta no roteador.
+  # Só sobe quando pedido ("docker compose up -d tailscale"): precisa da chave em tailscale.env (README, seção 9).
+  # Sem chave o login por link expira em 60 s e o contêiner entraria num ciclo de reinícios.
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: camera-tailscale
+    profiles: ["vpn"]
+    restart: unless-stopped
+    network_mode: host                    # o servidor inteiro passa a ser alcançável pelo IP da VPN (porta 8090 do painel)
+    cap_add: [NET_ADMIN, NET_RAW]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    env_file:
+      - path: ./tailscale.env             # TS_AUTHKEY=... (usada só no primeiro login; pode apagar depois)
+        required: false
+    environment:
+      TS_HOSTNAME: camera-viewer          # nome da máquina na sua rede Tailscale
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_ACCEPT_DNS: "false"              # não mexe no DNS do servidor
+      TS_USERSPACE: "false"               # interface de rede real (tailscale0): sem isso a VPN conecta mas não entrega ao painel
+      TS_AUTH_ONCE: "true"                # só usa a chave no primeiro login; depois reaproveita tailscale_state/
+    volumes:
+      - ./tailscale_state:/var/lib/tailscale   # guarda a identidade do servidor na VPN (segredo)

@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Câmera</title>
+<style>
+  :root {
+    --bg: #111; --panel: #1a1a1a; --card: #1e1e1e; --line: #2c2c2c;
+    --text: #ccc; --muted: #888; --accent: #4da3ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  body { display: flex; }
+
+  /* menu lateral */
+  nav { width: 190px; flex: none; background: var(--panel); border-right: 1px solid var(--line); padding: 16px 10px; }
+  nav h1 { font-size: 15px; margin: 0 8px 16px; color: #fff; }
+  nav a { display: block; padding: 10px 12px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; margin-bottom: 4px; }
+  nav a:hover { background: #262626; }
+  nav a.active { background: #26364a; color: #fff; }
+
+  main { flex: 1; min-width: 0; height: 100%; overflow: auto; }
+  .view { display: none; height: 100%; }
+  .view.active { display: block; }
+
+  /* ao vivo */
+  #live.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #cam { max-width: 100%; max-height: 92vh; background: #000; }
+  #status { margin-top: 8px; font-size: 14px; }
+  button, select { font: inherit; }
+  #status button { margin-left: 8px; }
+
+  /* gravações */
+  #rec { padding: 20px 24px 40px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 14px; }
+  .bar label { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  select, .btn { background: #222; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 7px 10px; }
+  .btn { cursor: pointer; }
+  .btn:hover { border-color: #666; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip { background: #222; border: 1px solid #3a3a3a; color: #ddd; border-radius: 999px; padding: 5px 13px; font-size: 13px; cursor: pointer; }
+  .chip:hover { border-color: #777; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #04121f; font-weight: 600; }
+  .chip small { opacity: .7; margin-left: 4px; }
+  #summary { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  #empty { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  #list { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 14px; }
+  .card { display: flex; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .card .thumb { flex: none; width: 240px; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; overflow: hidden; cursor: zoom-in; border: 0; padding: 0; }
+  .card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .info { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .time { font-size: 22px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 12px; border-radius: 4px; padding: 2px 8px; background: #2a3a2a; color: #9be39b; }
+  .tag.unk { background: #3d3320; color: #f0c870; }
+  .tag.obj { background: #25344a; color: #8fc1ff; }
+  .meta { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* revisar rostos */
+  .badge { background: #d9534f; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; margin-left: 6px; }
+  .badge:empty { display: none; }
+  #review { padding: 20px 24px 40px; }
+  #review .hint { font-size: 13px; color: var(--muted); margin: 0 0 18px; max-width: 760px; line-height: 1.5; }
+  .grp { margin-bottom: 30px; }
+  .grp header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 12px; }
+  .grp h3 { margin: 0 8px 0 0; font-size: 16px; color: #fff; }
+  .grp h3 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .tgt { background: #222; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 7px 10px; width: 170px; font: inherit; }
+  .btn.ok { border-color: #2f6b3a; color: #9be39b; }
+  .btn.bad { border-color: #7a3333; color: #f0a0a0; }
+  .faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .fc { background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+  .fc.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .fc .th { display: block; width: 100%; aspect-ratio: 1; border: 0; padding: 0; background: #000; cursor: zoom-in; }
+  .fc .th img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .fc .row { display: flex; gap: 6px; padding: 6px; }
+  .fc .row .btn { flex: 1; padding: 5px 0; }
+  .fc input[type=checkbox] { position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; cursor: pointer; }
+  #ask { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 30; padding: 16px; }
+  #ask.on { display: flex; }
+  #ask .box { background: #222; border: 1px solid #555; border-radius: 12px; padding: 20px; max-width: 420px; width: 100%; }
+  #ask p { margin: 0 0 18px; font-size: 15px; line-height: 1.5; color: #eee; }
+  #ask .gbtns { justify-content: flex-end; margin: 0; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #2b2b2b; border: 1px solid #555; color: #eee; padding: 10px 16px; border-radius: 8px; font-size: 14px; display: none; z-index: 20; max-width: 90vw; }
+  #toast.on { display: block; }
+
+  /* portão */
+  .gwrap { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); gap: 20px; padding: 20px 24px 40px; align-items: start; }
+  #snapbox { position: relative; line-height: 0; background: #000; border-radius: 8px; overflow: hidden; }
+  #snap { width: 100%; display: block; min-height: 140px; }
+  #roiCv { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+  .gnote { font-size: 13px; color: var(--muted); margin: 8px 0 10px; }
+  .gcard { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .gcard h4 { margin: 0 0 8px; font-size: 14px; color: #fff; }
+  .gcard ol { margin: 0 0 12px; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .gstate { font-size: 28px; font-weight: 700; }
+  .s-aberto { color: #f07070; } .s-fechado { color: #7be07b; } .s-sem-calibracao { color: #aaa; }
+  .gmeta { font-size: 13px; color: var(--muted); line-height: 1.7; margin-top: 4px; }
+  .warn { color: #f0c870; font-size: 13px; margin-top: 6px; }
+  .grow { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; margin: 8px 0; }
+  .grow input[type=tel] { width: 170px; background: #222; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 6px 8px; font: inherit; }
+  .grow input[type=number] { width: 84px; background: #222; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 6px 8px; font: inherit; }
+  .gbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  @media (max-width: 900px) { .gwrap { grid-template-columns: 1fr; padding: 14px 12px 30px; } }
+
+  /* pessoas e carros */
+  .pc .phead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .pc .pname { font-size: 17px; color: #fff; }
+  .pc .pobs { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .dropz { border: 2px dashed #3a3a3a; border-radius: 8px; padding: 10px; text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .dropz.over { border-color: var(--accent); color: #fff; background: #1d2a3a; }
+  .fc .warnb { position: absolute; left: 4px; bottom: 38px; background: #5a4a14; color: #f0c870; font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+  .fc .okb { position: absolute; left: 4px; bottom: 38px; background: #1f3d24; color: #9be39b; font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+  .btn.file { display: inline-block; }
+  .editrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+
+  /* carros */
+  #carSnapBox { position: relative; line-height: 0; background: #000; border-radius: 8px; overflow: hidden; }
+  #carSnap { width: 100%; display: block; min-height: 140px; }
+  #carCv { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+  .fc .row.col { flex-direction: column; }
+  .fc select.tgt, .fc input.tgt { width: 100%; padding: 4px 6px; font-size: 12px; }
+  .vlist div { padding: 2px 0; }
+
+  /* alertas */
+  .awrap { max-width: 760px; padding: 20px 24px 40px; }
+  .grow input[type=time] { background: #222; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 5px 8px; font: inherit; color-scheme: dark; }
+  .okc { color: #7be07b; } .badc { color: #f0a0a0; } .mutedc { color: var(--muted); }
+  .chan { font-size: 13px; line-height: 1.8; margin-bottom: 8px; }
+
+  /* imagem em tamanho completo */
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 96vw; max-height: 88vh; box-shadow: 0 0 30px #000; }
+  #lbCaption { position: absolute; top: 12px; left: 16px; right: 120px; color: #ddd; font-size: 14px; }
+  #lightbox .ctl { position: absolute; background: rgba(40,40,40,.85); color: #fff; border: 1px solid #555; border-radius: 8px; cursor: pointer; padding: 8px 14px; font-size: 18px; text-decoration: none; }
+  #lbClose { top: 10px; right: 14px; }
+  #lbOpen { bottom: 12px; right: 14px; font-size: 13px !important; }
+  #lbPrev { left: 12px; top: 50%; } #lbNext { right: 12px; top: 50%; }
+
+  @media (max-width: 760px) {
+    body { flex-direction: column; }
+    nav { width: 100%; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+    nav h1 { display: none; }
+    nav a { margin: 0; }
+    #rec { padding: 14px 12px 30px; }
+    #list { grid-template-columns: 1fr; }
+    .card .thumb { width: 150px; }
+    .time { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+  <nav>
+    <h1>Câmera</h1>
+    <a href="#ao-vivo" id="nav-live">Ao vivo</a>
+    <a href="#gravacoes" id="nav-rec">Gravações</a>
+    <a href="#portao" id="nav-gate">Portão</a>
+    <a href="#alertas" id="nav-alerts">Alertas</a>
+    <a href="#pessoas" id="nav-people">Pessoas</a>
+    <a href="#carros" id="nav-cars">Carros</a>
+    <a href="#revisar" id="nav-review">Revisar rostos<span class="badge" id="badge"></span></a>
+  </nav>
+
+  <main>
+    <section id="live" class="view">
+      <img id="cam" alt="Carregando câmera...">
+      <div id="status">Conectando... <button id="reload">Recarregar</button></div>
+    </section>
+
+    <section id="rec" class="view">
+      <div class="bar">
+        <label>Dia <select id="day"></select></label>
+        <button class="btn" id="refresh">Atualizar</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div id="summary"></div>
+      <div class="gnote" id="disk"></div>
+      <div id="list"></div>
+      <div id="empty" hidden>Nenhuma ocorrência.</div>
+    </section>
+
+    <section id="gate" class="view">
+      <div class="gwrap">
+        <div>
+          <div id="snapbox"><img id="snap" alt="Imagem da câmera"><canvas id="roiCv"></canvas></div>
+          <div class="gnote">Arraste sobre a imagem para marcar só a região do portão (verde = salva, azul = nova).</div>
+          <div class="gbtns" style="margin-top:0">
+            <button class="btn ok" id="roiSave">Salvar região</button>
+            <button class="btn" id="roiClear">Descartar seleção</button>
+          </div>
+        </div>
+        <div>
+          <div class="gcard">
+            <div class="gstate s-sem-calibracao" id="gStateName">…</div>
+            <div class="gmeta" id="gStateMeta"></div>
+            <div class="warn" id="gWarn"></div>
+          </div>
+          <div class="gcard">
+            <h4>Calibração</h4>
+            <ol>
+              <li>Marque a região do portão e salve.</li>
+              <li>Com o portão <b>fechado</b>, clique em "Adicionar referência". Repita em outros horários (dia, noite).</li>
+              <li>Opcional: abra o portão e clique em "Calibrar com portão aberto" para ajustar o limiar sozinho.</li>
+            </ol>
+            <div class="gbtns">
+              <button class="btn ok" data-gcmd="add_closed">Adicionar referência (portão fechado)</button>
+              <button class="btn" data-gcmd="calibrate_open">Calibrar com portão aberto</button>
+              <button class="btn bad" data-gcmd="clear_refs">Limpar referências</button>
+            </div>
+          </div>
+          <div class="gcard">
+            <h4>Alerta de portão aberto</h4>
+            <div class="gnote" style="margin-top:0">Telefone que recebe, Telegram e mensagens de teste ficam na aba <a href="#alertas" style="color:var(--accent)">Alertas</a>.</div>
+            <label class="grow">Alertas ligados <input type="checkbox" id="gEnabled"></label>
+            <label class="grow">Alertar após (minutos) <input type="number" id="gAfter" min="0.5" step="0.5"></label>
+            <label class="grow">Repetir a cada (minutos, 0 = não) <input type="number" id="gRepeat" min="0" step="1"></label>
+            <label class="grow">Avisar quando fechar <input type="checkbox" id="gNotifyClosed"></label>
+            <label class="grow">Limiar de abertura (similaridade) <input type="number" id="gThr" min="0.05" max="0.99" step="0.01"></label>
+            <div class="gbtns">
+              <button class="btn ok" id="gSave">Salvar ajustes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="alerts" class="view">
+      <div class="awrap">
+        <div class="gcard">
+          <h4>Canais</h4>
+          <label class="grow">Telefone que recebe (WhatsApp) <input type="tel" id="aPhone" placeholder="+55 11 99999-9999" autocomplete="off"></label>
+          <div class="chan"><b>WhatsApp (WAHA):</b> <span id="chWa">…</span><br><b>Telegram (reserva):</b> <span id="chTg">…</span></div>
+          <div class="gnote" style="margin-top:0">O WhatsApp é o canal principal. Se o envio falhar, o Telegram é usado no lugar, quando configurado.</div>
+          <div class="gbtns">
+            <button class="btn" data-gcmd="test_alert">Testar WhatsApp</button>
+            <button class="btn" data-gcmd="test_telegram">Testar Telegram</button>
+          </div>
+        </div>
+        <div class="gcard">
+          <h4>Pessoa desconhecida (com foto)</h4>
+          <label class="grow">Alerta ligado <input type="checkbox" id="aUnkOn"></label>
+          <label class="grow">Das <input type="time" id="aUnkFrom"></label>
+          <label class="grow">Até <input type="time" id="aUnkTo"></label>
+          <label class="grow">Intervalo mínimo entre alertas (min) <input type="number" id="aUnkCool" min="0" step="1"></label>
+          <label class="grow">Incluir pessoa com rosto não visível <input type="checkbox" id="aUnkNoFace"></label>
+          <div class="gnote" style="margin-top:0">Vale só dentro do horário (pode virar a meia-noite). "Rosto não visível" gera muitos avisos com a câmera alta, pois moradores também aparecem com o rosto cortado.</div>
+        </div>
+        <div class="gcard">
+          <h4>Saúde do sistema</h4>
+          <label class="grow">Avisos ligados <input type="checkbox" id="aHealthOn"></label>
+          <label class="grow">Câmera sem sinal após (min) <input type="number" id="aCamMin" min="1" step="1"></label>
+          <label class="grow">WhatsApp desconectado após (min) <input type="number" id="aWaMin" min="1" step="1"></label>
+          <div class="gnote" style="margin-top:0">O aviso de WhatsApp desconectado só chega pelo Telegram (o WhatsApp estaria fora).</div>
+        </div>
+        <div class="gbtns" style="margin-bottom:10px"><button class="btn ok" id="aSave">Salvar</button></div>
+      </div>
+    </section>
+
+    <section id="people" class="view">
+      <div class="awrap" style="max-width: 1100px">
+        <p class="hint">Cadastre as pessoas que o sistema deve reconhecer. Envie de 5 a 10 fotos do rosto (de frente, com boa luz, variando um pouco a expressão e o ambiente). As fotos ficam na pasta <code>faces/&lt;nome&gt;</code> e passam a valer no reconhecimento em cerca de 30 s. Fotos marcadas com <b>⚠ sem rosto</b> não foram usadas: troque por outra.</p>
+        <div class="gcard">
+          <h4>Nova pessoa</h4>
+          <div class="editrow">
+            <input class="tgt" id="pNewName" placeholder="Nome (ex.: Maria)" style="width: 220px" maxlength="60">
+            <input class="tgt" id="pNewObs" placeholder="Observação (opcional)" style="width: 280px" maxlength="300">
+            <button class="btn ok" id="pNewBtn">Cadastrar</button>
+          </div>
+        </div>
+        <div id="peopleList"></div>
+        <div id="peopleEmpty" class="mutedc" hidden style="padding: 20px 0">Nenhuma pessoa cadastrada ainda.</div>
+      </div>
+    </section>
+
+    <section id="cars" class="view">
+      <div class="gwrap">
+        <div>
+          <div id="carSnapBox"><img id="carSnap" alt="Imagem da câmera"><canvas id="carCv"></canvas></div>
+          <div class="gnote">Arraste sobre a imagem para marcar a <b>garagem</b> (amarelo = salva, azul = nova). Carros: <span class="okc">verde = cadastrado e presente</span>, <span style="color:#ff8c00">laranja = não cadastrado</span>.</div>
+          <div class="gbtns" style="margin-top: 0">
+            <button class="btn ok" id="carZoneSave">Salvar garagem</button>
+            <button class="btn" id="carZoneClear">Descartar seleção</button>
+            <button class="btn bad" id="carZoneRemove">Remover zona</button>
+          </div>
+          <div class="gcard" style="margin-top: 14px">
+            <h4>Na garagem agora</h4><div class="chan vlist" id="carNow">…</div>
+            <h4 style="margin-top: 10px">Últimos eventos</h4><div class="chan vlist" id="carEvents">…</div>
+          </div>
+        </div>
+        <div>
+          <div class="gcard">
+            <h4>Como cadastrar um carro</h4>
+            <ol>
+              <li>Desenhe e salve a <b>garagem</b> (a área onde os carros estacionam).</li>
+              <li>Com o carro <b>estacionado</b>, clique em "Capturar carros da garagem agora".</li>
+              <li>Na captura, escolha o carro (ou "Novo carro…" e digite o nome) e clique em Cadastrar. Repita em outro horário (dia e noite).</li>
+            </ol>
+            <div class="gnote" style="margin-top: 0">Desenhe a garagem em volta da vaga. O reconhecimento compara o <b>formato</b> (bordas, e não a cor: a câmera muda a cor à noite) com as fotos capturadas por esta câmera. Carros do mesmo modelo se confundem, e a placa não é lida. Se um carro seu aparecer como "não cadastrado", capture outra foto dele ou baixe a nota mínima.</div>
+          </div>
+          <div class="gcard">
+            <h4>Ajustes</h4>
+            <label class="grow">Tempo parado para avisar (s) <input type="number" id="cStop" min="5" max="600" step="5"></label>
+            <label class="grow">Nota mínima p/ o carro estar presente (0,30 a 0,99) <input type="number" id="cThr" min="0.3" max="0.99" step="0.01"></label>
+            <label class="grow">Avisar também carro NÃO cadastrado (beta) <input type="checkbox" id="cUnk"></label>
+            <div class="gbtns"><button class="btn ok" id="cSave">Salvar ajustes</button></div>
+          </div>
+          <div class="gcard">
+            <h4>Capturar da câmera</h4>
+            <div class="gbtns" style="margin-top: 0"><button class="btn ok" id="cCapture">Capturar carros da garagem agora</button></div>
+            <div class="faces" id="carCaptures" style="margin-top: 10px"></div>
+          </div>
+          <div class="gcard">
+            <h4>Carros cadastrados</h4>
+            <div class="editrow"><input class="tgt" id="cNewName" placeholder="Nome (ex.: Polo branco)" maxlength="60" style="width: 220px"><button class="btn ok" id="cNewBtn">Criar carro</button></div>
+            <div id="carsList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="review" class="view">
+      <p class="hint">Rostos coletados automaticamente pela câmera. <b>Aprovar</b> copia a foto para o cadastro (<code>faces/&lt;nome&gt;</code>) e passa a ser usada no reconhecimento em cerca de 30 s. Para uma pessoa nova, digite o nome no campo do grupo "Desconhecidas". <b>Descartar</b> apaga a foto.</p>
+      <div id="groups"></div>
+      <div id="empty-review" class="muted" hidden style="color:var(--muted);padding:30px 0">Nenhum rosto para revisar. Eles aparecem aqui quando o sistema vê pessoas de frente e com boa qualidade.</div>
+    </section>
+  </main>
+  <datalist id="peopleDl"></datalist>
+  <div id="toast"></div>
+  <div id="ask"><div class="box"><p id="askMsg"></p><div class="gbtns"><button class="btn" id="askNo">Cancelar</button><button class="btn ok" id="askYes">Confirmar</button></div></div></div>
+
+  <div id="lightbox">
+    <div id="lbCaption"></div>
+    <button class="ctl" id="lbClose" title="Fechar (Esc)">✕</button>
+    <button class="ctl" id="lbPrev" title="Anterior (←)">‹</button>
+    <button class="ctl" id="lbNext" title="Próxima (→)">›</button>
+    <a class="ctl" id="lbOpen" target="_blank" rel="noopener">Abrir em nova aba</a>
+    <img id="lbImg" alt="">
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // Confirmação dentro da página: o confirm() nativo é bloqueado em alguns navegadores embutidos (retorna false sem mostrar nada).
+  function ask(msg) {
+    return new Promise((resolve) => {
+      $('askMsg').textContent = msg;
+      $('ask').classList.add('on');
+      const done = (v) => { $('ask').classList.remove('on'); $('askYes').onclick = $('askNo').onclick = null; resolve(v); };
+      $('askYes').onclick = () => done(true);
+      $('askNo').onclick = () => done(false);
+      $('askYes').focus();
+    });
+  }
+
+  // ---------- ao vivo ----------
+  const img = $('cam'), status = $('status');
+  function connect() { img.src = '/stream?t=' + Date.now(); }
+  function disconnect() { img.removeAttribute('src'); } // fecha o stream: o ffmpeg para quando ninguém assiste
+  let retry = null;
+  img.onload = () => { status.firstChild.textContent = 'Ao vivo '; };
+  img.onerror = () => {
+    if (!img.getAttribute('src')) return;
+    status.firstChild.textContent = 'Sem sinal, tentando de novo... ';
+    clearTimeout(retry); retry = setTimeout(() => { if (view === 'live') connect(); }, 3000);
+  };
+  $('reload').onclick = connect;
+
+  // ---------- navegação ----------
+  let view = null;
+  function route() {
+    const next = { '#gravacoes': 'rec', '#revisar': 'review', '#portao': 'gate', '#alertas': 'alerts', '#pessoas': 'people', '#carros': 'cars' }[location.hash] || 'live';
+    if (next === view) return;
+    view = next;
+    for (const v of ['live', 'rec', 'review', 'gate', 'alerts', 'people', 'cars']) {
+      $(v).classList.toggle('active', view === v);
+      $('nav-' + v).classList.toggle('active', view === v);
+    }
+    clearTimeout(retry); clearTimeout(timer); clearTimeout(gateTimer); clearTimeout(peopleTimer); clearTimeout(carsTimer);
+    if (view === 'live') connect(); else disconnect();
+    if (view === 'rec') loadDays();
+    if (view === 'review') loadCands();
+    if (view === 'gate' || view === 'alerts') loadGate();
+    if (view === 'people') loadPeople();
+    if (view === 'cars') loadCars();
+  }
+  addEventListener('hashchange', route);
+
+  // ---------- gravações ----------
+  let events = [], filter = null, shown = [], lastSig = '', timer = null;
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const tagClass = (t) => (t === 'desconhecida' || t === 'carro-nao-cadastrado' || t === 'pessoa (sem identificação)' ? 'unk' : t.startsWith('carro-') ? 'obj' : ['carro', 'moto', 'caminhao', 'onibus', 'bicicleta', 'gato', 'cachorro'].includes(t) ? 'obj' : '');
+  let peopleNames = {};
+  const cap = (s) => peopleNames[s] || s.charAt(0).toUpperCase() + s.slice(1);
+  const fmtDate = (d) => { const [dd, mm, yy] = d.split('-'); return `${dd}/${mm}/${yy}`; };
+  const url = (e) => `/media/${$('day').value}/${encodeURIComponent(e.file)}`;
+
+  async function loadDays() {
+    Promise.all([fetch('/api/people').then((r) => r.json()), fetch('/api/cars').then((r) => r.json())]).then(([ps, cs]) => {
+      peopleNames = { ...Object.fromEntries(ps.filter((p) => p.nome !== p.slug).map((p) => [p.slug, p.nome])),
+        ...Object.fromEntries(cs.cars.map((c) => ['carro-' + c.slug, '🚗 ' + c.nome])), 'carro-nao-cadastrado': '🚗 Carro não cadastrado' };
+    }).catch(() => {});
+    const days = await fetch('/api/days').then((r) => r.json()).catch(() => []);
+    const sel = $('day'), cur = sel.value;
+    sel.innerHTML = days.map((d) => `<option value="${d.date}">${fmtDate(d.date)} (${d.count})</option>`).join('');
+    if (days.length) sel.value = days.some((d) => d.date === cur) ? cur : days[0].date;
+    loadEvents();
+    loadDisk();
+  }
+
+  async function loadDisk() {
+    const d = await fetch('/api/disk').then((r) => r.json()).catch(() => null);
+    if (!d) return;
+    const gb = (n) => (n / 1e9).toFixed(0) + ' GB';
+    const keep = d.retentionDays > 0 ? `fotos com mais de ${d.retentionDays} dias são apagadas automaticamente` : 'limpeza automática desligada';
+    $('disk').textContent = (d.total ? `Disco: ${gb(d.free)} livres de ${gb(d.total)} · ` : '') + keep;
+  }
+
+  async function loadEvents() {
+    clearTimeout(timer);
+    const day = $('day').value;
+    if (day) {
+      const data = await fetch('/api/events?date=' + day).then((r) => r.json()).catch(() => null);
+      if (data) {
+        const sig = day + JSON.stringify(data);
+        if (sig !== lastSig) { lastSig = sig; events = data; render(); }
+      }
+    } else { events = []; render(); }
+    if (view === 'rec') timer = setTimeout(loadDays, 20000); // atualiza sozinho
+  }
+
+  function render() {
+    // filtros: uma bolinha por pessoa/objeto que apareceu no dia
+    const counts = {};
+    events.forEach((e) => e.tags.forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+    if (filter && !counts[filter]) filter = null;
+    const names = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+    $('chips').innerHTML =
+      `<button class="chip ${filter ? '' : 'on'}" data-f="">Todos<small>${events.length}</small></button>` +
+      names.map((n) => `<button class="chip ${filter === n ? 'on' : ''}" data-f="${esc(n)}">${esc(cap(n))}<small>${counts[n]}</small></button>`).join('');
+
+    shown = filter ? events.filter((e) => e.tags.includes(filter)) : events;
+    $('summary').textContent = $('day').value
+      ? `${shown.length} ocorrência${shown.length === 1 ? '' : 's'}${filter ? ' de ' + cap(filter) : ''} em ${fmtDate($('day').value)}`
+      : '';
+    $('empty').hidden = shown.length > 0;
+    $('empty').textContent = $('day').value ? 'Nenhuma ocorrência com esse filtro.' : 'Ainda não há gravações.';
+
+    $('list').innerHTML = shown.map((e, i) => `
+      <article class="card">
+        <button class="thumb" data-i="${i}" title="Ver em tamanho completo"><img loading="lazy" src="${url(e)}" alt="${esc(e.tags.join(', '))} às ${e.time}"></button>
+        <div class="info">
+          <div class="time">${e.time}</div>
+          <div class="tags">${e.tags.map((t) => `<span class="tag ${tagClass(t)}">${esc(cap(t))}</span>`).join('')}</div>
+          <div class="meta">${e.evento ? (e.evento === 'saiu' ? '🚪 saiu da garagem<br>' : '🅿️ parou na garagem<br>') : ''}${e.seconds !== undefined ? `${e.seconds} s em cena<br>` : ''}${e.faceConf !== undefined ? `confiança do rosto: ${e.faceConf}` : ''}</div>
+        </div>
+      </article>`).join('');
+  }
+
+  $('chips').onclick = (ev) => {
+    const b = ev.target.closest('.chip'); if (!b) return;
+    filter = b.dataset.f || null; render();
+  };
+  $('list').onclick = (ev) => {
+    const b = ev.target.closest('.thumb'); if (!b) return;
+    const day = fmtDate($('day').value);
+    openBox(shown.map((e) => ({ src: url(e), cap: `${day} ${e.time} — ${e.tags.join(', ')}` })), +b.dataset.i);
+  };
+  $('day').onchange = () => { filter = null; lastSig = ''; loadEvents(); };
+  $('refresh').onclick = loadDays;
+
+  // ---------- imagem em tamanho completo ----------
+  let lb = { items: [], cur: 0 };
+  function openBox(items, i) {
+    lb = { items, cur: (i + items.length) % items.length };
+    const it = items[lb.cur];
+    $('lbImg').src = it.src;
+    $('lbOpen').href = it.src;
+    $('lbCaption').textContent = `${it.cap}  (${lb.cur + 1}/${items.length})`;
+    $('lightbox').classList.add('open');
+  }
+  const step = (d) => openBox(lb.items, lb.cur + d);
+  const closeBox = () => { $('lightbox').classList.remove('open'); $('lbImg').removeAttribute('src'); };
+  $('lbClose').onclick = closeBox;
+  $('lbPrev').onclick = () => step(-1);
+  $('lbNext').onclick = () => step(1);
+  $('lightbox').onclick = (ev) => { if (ev.target.id === 'lightbox') closeBox(); };
+  addEventListener('keydown', (ev) => {
+    if (!$('lightbox').classList.contains('open')) return;
+    if (ev.key === 'Escape') closeBox();
+    else if (ev.key === 'ArrowLeft') step(-1);
+    else if (ev.key === 'ArrowRight') step(1);
+  });
+
+  // ---------- revisar rostos ----------
+  let cands = { folders: [], people: [] }, picked = new Set(), targets = {}, toastTimer = null;
+  const toast = (msg) => { $('toast').textContent = msg; $('toast').classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('on'), 5000); };
+  const slugName = (v) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  const candUrl = (g, f) => `/cand/${g}/${encodeURIComponent(f)}`;
+  const grpTitle = (n) => (n === '_desconhecida' ? 'Desconhecidas' : cap(n));
+
+  async function fetchCands() {
+    const d = await fetch('/api/candidates').then((r) => r.json()).catch(() => null);
+    if (!d) return false;
+    cands = d;
+    const keys = new Set(d.folders.flatMap((g) => g.files.map((f) => g.name + '/' + f)));
+    picked = new Set([...picked].filter((k) => keys.has(k)));
+    const total = keys.size;
+    $('badge').textContent = total ? total : '';
+    $('peopleDl').innerHTML = d.people.map((n) => `<option value="${esc(n)}">`).join('');
+    return true;
+  }
+  async function loadCands() { if (await fetchCands()) renderCands(); }
+  setInterval(() => { if (view !== 'review') fetchCands(); }, 30000); // só atualiza o contador do menu
+  fetchCands();
+
+  function renderCands() {
+    $('empty-review').hidden = cands.folders.length > 0;
+    $('groups').innerHTML = cands.folders.map((g) => `
+      <section class="grp" data-g="${g.name}">
+        <header>
+          <h3>${esc(grpTitle(g.name))}<small>${g.files.length} pendente${g.files.length === 1 ? '' : 's'}</small></h3>
+          <input class="tgt" list="peopleDl" placeholder="Nome da pessoa" value="${esc(targets[g.name] ?? (g.name === '_desconhecida' ? '' : g.name))}">
+          <button class="btn" data-act="all">Selecionar todos</button>
+          <button class="btn ok" data-act="approve">Aprovar selecionados</button>
+          <button class="btn bad" data-act="discard">Descartar selecionados</button>
+        </header>
+        <div class="faces">${g.files.map((f) => `
+          <div class="fc ${picked.has(g.name + '/' + f) ? 'sel' : ''}" data-k="${esc(g.name + '/' + f)}">
+            <input type="checkbox" ${picked.has(g.name + '/' + f) ? 'checked' : ''}>
+            <button class="th" data-open title="Ver em tamanho completo"><img loading="lazy" src="${candUrl(g.name, f)}" alt=""></button>
+            <div class="row"><button class="btn ok" data-act="ok1" title="Aprovar">✓</button><button class="btn bad" data-act="no1" title="Descartar">✕</button></div>
+          </div>`).join('')}
+        </div>
+      </section>`).join('');
+  }
+
+  async function post(path, body) {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'erro ' + r.status);
+    return j;
+  }
+  const itemsOf = (keys) => keys.map((k) => { const [folder, ...f] = k.split('/'); return { folder, file: f.join('/') }; });
+
+  async function act(kind, keys, grp) {
+    if (!keys.length) return toast('Selecione ao menos uma foto.');
+    try {
+      if (kind === 'approve') {
+        const typed = $('groups').querySelector(`[data-g="${grp}"] .tgt`).value.trim();
+        const target = slugName(typed);
+        if (!target) return toast('Informe o nome da pessoa no campo do grupo.');
+        const r = await post('/api/candidates/approve', { items: itemsOf(keys), target });
+        toast(`${r.moved} foto(s) adicionada(s) a faces/${target}. O reconhecimento usa em ~30 s.`);
+      } else {
+        if (keys.length > 1 && !(await ask(`Descartar ${keys.length} fotos? Elas serão apagadas.`))) return;
+        const r = await post('/api/candidates/discard', { items: itemsOf(keys) });
+        toast(`${r.removed} foto(s) descartada(s).`);
+      }
+      keys.forEach((k) => picked.delete(k));
+      loadCands();
+    } catch (e) { toast('Não foi possível: ' + e.message); }
+  }
+
+  $('groups').addEventListener('click', (ev) => {
+    const card = ev.target.closest('.fc'), grp = ev.target.closest('.grp');
+    if (!grp) return;
+    if (ev.target.closest('[data-open]')) {
+      const g = cands.folders.find((x) => x.name === grp.dataset.g);
+      const items = g.files.map((f) => ({ src: candUrl(g.name, f), cap: `${grpTitle(g.name)} — ${f}` }));
+      return openBox(items, g.files.indexOf(card.dataset.k.split('/').slice(1).join('/')));
+    }
+    const b = ev.target.closest('[data-act]'); if (!b) return;
+    const keysOf = (sel) => [...grp.querySelectorAll(sel)].map((c) => c.dataset.k);
+    if (b.dataset.act === 'ok1') act('approve', [card.dataset.k], grp.dataset.g);
+    else if (b.dataset.act === 'no1') act('discard', [card.dataset.k], grp.dataset.g);
+    else if (b.dataset.act === 'approve') act('approve', keysOf('.fc.sel'), grp.dataset.g);
+    else if (b.dataset.act === 'discard') act('discard', keysOf('.fc.sel'), grp.dataset.g);
+    else if (b.dataset.act === 'all') {
+      const all = keysOf('.fc'), every = all.every((k) => picked.has(k));
+      all.forEach((k) => (every ? picked.delete(k) : picked.add(k)));
+      renderCands();
+    }
+  });
+  $('groups').addEventListener('change', (ev) => {
+    const card = ev.target.closest('.fc'); if (!card || ev.target.type !== 'checkbox') return;
+    ev.target.checked ? picked.add(card.dataset.k) : picked.delete(card.dataset.k);
+    card.classList.toggle('sel', ev.target.checked);
+  });
+  $('groups').addEventListener('input', (ev) => {
+    if (ev.target.classList.contains('tgt')) targets[ev.target.closest('.grp').dataset.g] = ev.target.value;
+  });
+
+  // ---------- portão ----------
+  let gate = { config: {}, state: null }, draft = null, gateTimer = null, formLoaded = false, alertsLoaded = false, phoneLoaded = false, lastCmdAt = 0, savedPhone = '';
+  const fmtDur = (s) => (s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
+  const clock = (epoch) => new Date(epoch * 1000).toLocaleTimeString('pt-BR');
+  const STATE_NAME = { aberto: 'ABERTO', fechado: 'Fechado', 'sem-calibracao': 'Sem calibração' };
+
+  async function loadGate() {
+    clearTimeout(gateTimer);
+    const d = await fetch('/api/gate').then((r) => r.json()).catch(() => null);
+    if (d) { gate = d; renderGate(); }
+    if (view === 'gate') {
+      const im = new Image();
+      im.onload = () => { $('snap').src = im.src; drawRoi(); };
+      im.src = '/gate/latest.jpg?t=' + Date.now();
+    }
+    if (view === 'gate' || view === 'alerts') gateTimer = setTimeout(loadGate, 3000);
+  }
+
+  function fillGateForm() {
+    const c = gate.config;
+    $('gEnabled').checked = c.enabled !== false;
+    $('gAfter').value = c.alertAfterMin ?? 2;
+    $('gRepeat').value = c.repeatMin ?? 10;
+    $('gNotifyClosed').checked = c.notifyClosed !== false;
+    $('gThr').value = c.threshold ?? 0.6;
+    formLoaded = true;
+  }
+
+  function fillAlertsForm() {
+    const c = gate.config, st = gate.state;
+    $('aUnkOn').checked = c.unknownEnabled !== false;
+    $('aUnkFrom').value = c.unknownFrom ?? '18:00';
+    $('aUnkTo').value = c.unknownTo ?? '07:00';
+    $('aUnkCool').value = c.unknownCooldownMin ?? 5;
+    $('aUnkNoFace').checked = !!c.unknownIncludeNoFace;
+    $('aHealthOn').checked = c.healthEnabled !== false;
+    $('aCamMin').value = c.cameraDownMin ?? 5;
+    $('aWaMin').value = c.whatsappDownMin ?? 5;
+    alertsLoaded = true;
+  }
+
+  function renderAlerts() {
+    if (!alertsLoaded) fillAlertsForm();
+    const st = gate.state;
+    const effPhone = gate.config.phone || (st && st.alert.phone) || '';
+    if (!phoneLoaded && effPhone) { $('aPhone').value = savedPhone = effPhone; phoneLoaded = true; }
+    if (!st) return;
+    const a = st.alert;
+    $('chWa').innerHTML = !a.whatsappConfigured ? '<span class="badc">não configurado (seção "alerts" do config.json)</span>'
+      : a.link === 'WORKING' ? '<span class="okc">conectado ✓</span>'
+      : `<span class="badc">desconectado (${esc(a.link || '?')})</span> — abra http://localhost:3000/dashboard nesta máquina e leia o QR code`;
+    $('chTg').innerHTML = a.telegramConfigured ? '<span class="okc">configurado ✓</span>'
+      : '<span class="mutedc">não configurado (opcional; veja o README, seção Telegram)</span>';
+  }
+
+  function renderGate() {
+    if (!formLoaded) fillGateForm();
+    renderAlerts();
+    const st = gate.state;
+    const name = $('gStateName'), meta = $('gStateMeta'), warn = [];
+    if (!st) {
+      name.textContent = 'Aguardando o analyzer…'; name.className = 'gstate s-sem-calibracao'; meta.textContent = '';
+      $('gWarn').textContent = ''; return;
+    }
+    name.textContent = STATE_NAME[st.state] || st.state;
+    name.className = 'gstate s-' + st.state;
+    const lines = [];
+    if (st.state === 'aberto') lines.push(`Aberto há <b>${fmtDur(st.openSeconds)}</b> (desde ${clock(st.since)})`);
+    else if (st.state === 'fechado' && st.since) lines.push(`Fechado desde ${clock(st.since)}`);
+    if (st.score !== null && st.score !== undefined) lines.push(`Similaridade com o portão fechado: <b>${st.score}</b> (considera aberto abaixo de ${st.threshold})`);
+    lines.push(`Referências: ${st.refs}${st.autoRefs ? ` (${st.autoRefs} automática${st.autoRefs === 1 ? '' : 's'}, acompanham a luz)` : ''}`);
+    if (st.alert.alerted) lines.push(`Alerta enviado às ${clock(st.alert.lastAlertAt)}`);
+    meta.innerHTML = lines.join('<br>');
+    if (!st.roiSet) warn.push('Defina e salve a região do portão.');
+    else if (!st.refs) warn.push('Adicione ao menos uma referência com o portão fechado.');
+    if (!st.alert.whatsappConfigured && !st.alert.telegramConfigured) warn.push('Nenhum canal de alerta configurado (aba Alertas).');
+    else if (st.alert.whatsappConfigured && st.alert.link !== 'WORKING') {
+      warn.push(`WhatsApp não conectado (${st.alert.link || '?'})${st.alert.telegramConfigured ? '; os alertas vão pelo Telegram' : ''}. Veja a aba Alertas.`);
+    }
+    if (st.alert.lastError) warn.push('Último erro de envio: ' + st.alert.lastError);
+    const age = Date.now() / 1000 - st.updatedAt;
+    if (age > 30) warn.push(`Sem atualização do analyzer há ${fmtDur(age)} (câmera fora do ar?).`);
+    $('gWarn').innerHTML = warn.join('<br>');
+    if (st.lastCommand && st.lastCommand.at > lastCmdAt) {
+      if (lastCmdAt) toast((st.lastCommand.ok ? '✓ ' : '✕ ') + st.lastCommand.msg);
+      lastCmdAt = st.lastCommand.at;
+    }
+  }
+
+  // região do portão: desenhar com o mouse/dedo sobre a imagem
+  function drawRoi() {
+    const c = $('roiCv'); c.width = c.clientWidth; c.height = c.clientHeight;
+    const g = c.getContext('2d');
+    const box = (r, color, fill, dash) => {
+      g.setLineDash(dash ? [6, 4] : []); g.lineWidth = 2; g.strokeStyle = color; g.fillStyle = fill;
+      g.fillRect(r.x * c.width, r.y * c.height, r.w * c.width, r.h * c.height);
+      g.strokeRect(r.x * c.width, r.y * c.height, r.w * c.width, r.h * c.height);
+    };
+    if (gate.config.roi) box(gate.config.roi, '#4cd964', 'rgba(76,217,100,.12)', true);
+    if (draft) box(draft, '#4da3ff', 'rgba(77,163,255,.2)', false);
+  }
+  let dragFrom = null;
+  const rel = (ev) => { const b = $('roiCv').getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (ev.clientX - b.left) / b.width)), y: Math.min(1, Math.max(0, (ev.clientY - b.top) / b.height)) }; };
+  $('roiCv').addEventListener('pointerdown', (ev) => { dragFrom = rel(ev); $('roiCv').setPointerCapture(ev.pointerId); });
+  const dragTo = (ev) => {
+    if (!dragFrom) return;
+    const p = rel(ev);
+    draft = { x: Math.min(dragFrom.x, p.x), y: Math.min(dragFrom.y, p.y), w: Math.abs(p.x - dragFrom.x), h: Math.abs(p.y - dragFrom.y) };
+    drawRoi();
+  };
+  $('roiCv').addEventListener('pointermove', dragTo);
+  $('roiCv').addEventListener('pointerup', (ev) => {
+    dragTo(ev); dragFrom = null;
+    if (draft && (draft.w < 0.02 || draft.h < 0.02)) { draft = null; drawRoi(); }
+  });
+  addEventListener('resize', () => { if (view === 'gate') drawRoi(); });
+
+  $('roiClear').onclick = () => { draft = null; drawRoi(); };
+  $('roiSave').onclick = async () => {
+    if (!draft) return toast('Arraste sobre a imagem para marcar a região primeiro.');
+    try {
+      await post('/api/gate/config', { roi: draft });
+      draft = null;
+      toast('Região salva. Agora, com o portão FECHADO, adicione a referência.');
+      loadGate();
+    } catch (e) { toast('Não foi possível: ' + e.message); }
+  };
+  $('gSave').onclick = async () => {
+    try {
+      await post('/api/gate/config', {
+        enabled: $('gEnabled').checked, alertAfterMin: +$('gAfter').value, repeatMin: +$('gRepeat').value,
+        notifyClosed: $('gNotifyClosed').checked, threshold: +$('gThr').value,
+      });
+      formLoaded = false; toast('Ajustes salvos.'); loadGate();
+    } catch (e) { toast('Não foi possível: ' + e.message); }
+  };
+  $('aSave').onclick = async () => {
+    try {
+      const r = await post('/api/gate/config', {
+        phone: $('aPhone').value.trim(),
+        unknownEnabled: $('aUnkOn').checked, unknownFrom: $('aUnkFrom').value, unknownTo: $('aUnkTo').value,
+        unknownCooldownMin: +$('aUnkCool').value, unknownIncludeNoFace: $('aUnkNoFace').checked,
+        healthEnabled: $('aHealthOn').checked, cameraDownMin: +$('aCamMin').value, whatsappDownMin: +$('aWaMin').value,
+      });
+      alertsLoaded = false;
+      if (r.phone) { $('aPhone').value = savedPhone = r.phone; phoneLoaded = true; }
+      else { phoneLoaded = false; $('aPhone').value = ''; setTimeout(loadGate, 2500); } // campo vazio: volta ao padrão do config.json
+      toast('Alertas salvos.'); loadGate();
+    } catch (e) { toast('Não foi possível: ' + e.message); }
+  };
+  document.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-gcmd]'); if (!b) return;
+    const cmd = b.dataset.gcmd;
+    if (cmd === 'clear_refs' && !(await ask('Remover todas as referências do portão fechado?'))) return;
+    if (cmd === 'test_alert') {
+      const typed = $('aPhone').value.replace(/\D/g, '');
+      if (typed && !savedPhone.replace(/\D/g, '').endsWith(typed)) return toast('Clique em "Salvar" antes de testar: o telefone foi alterado.');
+      if (!(await ask(`Enviar agora uma mensagem de teste (com foto) por WhatsApp para ${savedPhone || 'o telefone configurado'}?`))) return;
+    }
+    if (cmd === 'test_telegram' && !(await ask('Enviar agora uma mensagem de teste (com foto) pelo Telegram?'))) return;
+    if (cmd === 'calibrate_open' && !(await ask('O portão está ABERTO agora? O limiar será ajustado com base nesta imagem.'))) return;
+    try { await post('/api/gate/cmd', { cmd }); toast('Comando enviado…'); setTimeout(loadGate, 2500); }
+    catch (e) { toast('Não foi possível: ' + e.message); }
+  });
+
+  // ---------- pessoas ----------
+  let people = [], peopleTimer = null, peopleSig = '', editing = null, busy = false;
+
+  async function loadPeople() {
+    clearTimeout(peopleTimer);
+    if (!busy && !editing) {
+      const d = await fetch('/api/people').then((r) => r.json()).catch(() => null);
+      if (d) {
+        const sig = JSON.stringify(d);
+        if (sig !== peopleSig) { peopleSig = sig; people = d; renderPeople(); }
+      }
+    }
+    if (view === 'people') peopleTimer = setTimeout(loadPeople, 6000); // atualiza os avisos de "sem rosto" depois que o analyzer processa
+  }
+
+  function renderPeople() {
+    $('peopleEmpty').hidden = people.length > 0;
+    $('peopleList').innerHTML = people.map((p) => {
+      const warn = p.photos.filter((f) => f.ok === false).length;
+      const head = editing === p.slug
+        ? `<div class="editrow"><input class="tgt" data-f="nome" value="${esc(p.nome)}" maxlength="60" placeholder="Nome"><input class="tgt" data-f="obs" value="${esc(p.obs)}" maxlength="300" placeholder="Observação" style="width:260px"><button class="btn ok" data-pact="save">Salvar</button><button class="btn" data-pact="cancel">Cancelar</button></div>`
+        : `<div class="phead"><div><b class="pname">${esc(p.nome)}</b> <small class="mutedc">(pasta: ${esc(p.slug)})</small> · <span class="mutedc">${p.photos.length} foto${p.photos.length === 1 ? '' : 's'}${warn ? `, <span class="badc">${warn} sem rosto</span>` : ''}</span>${p.candidates ? ` · <a href="#revisar" style="color:var(--accent)">${p.candidates} para revisar</a>` : ''}</div>
+            <div class="gbtns" style="margin:0"><button class="btn" data-pact="edit">Editar</button><label class="btn ok file">Adicionar fotos<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden></label><button class="btn bad" data-pact="del">Excluir pessoa</button></div></div>
+           ${p.obs ? `<div class="pobs">${esc(p.obs)}</div>` : ''}`;
+      return `<div class="gcard pc" data-slug="${esc(p.slug)}">${head}
+        <div class="dropz">Arraste fotos para cá${p.photos.length < 3 ? ' · <b>poucas fotos: o ideal é 5 ou mais</b>' : ''}</div>
+        <div class="faces">${p.photos.map((f) => `
+          <div class="fc" data-file="${esc(f.file)}">
+            <button class="th" data-open title="Ver em tamanho completo"><img loading="lazy" src="/face/${encodeURIComponent(p.slug)}/${encodeURIComponent(f.file)}" alt=""></button>
+            ${f.ok === false ? '<span class="warnb">⚠ sem rosto</span>' : f.ok === true ? '<span class="okb">✓ rosto</span>' : ''}
+            <div class="row"><button class="btn bad" data-pact="delphoto" title="Remover foto">✕</button></div>
+          </div>`).join('')}</div></div>`;
+    }).join('');
+  }
+
+  async function uploadFiles(slug, files) {
+    const list = [...files].filter((f) => /^image\/(jpeg|png|webp)$/.test(f.type));
+    if (!list.length) return toast('Escolha fotos JPG, PNG ou WEBP.');
+    busy = true; let ok = 0;
+    for (const [i, f] of list.entries()) {
+      if (f.size > 10 * 1024 * 1024) { toast(`${f.name}: maior que 10 MB, ignorada.`); continue; }
+      toast(`Enviando ${i + 1}/${list.length}…`);
+      try {
+        const r = await fetch('/api/people/upload', { method: 'POST', headers: { 'X-Upload': '1', 'X-Slug': slug, 'X-Filename': encodeURIComponent(f.name), 'Content-Type': f.type }, body: f });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'erro ' + r.status);
+        ok++;
+      } catch (e) { toast(`${f.name}: ${e.message}`); }
+    }
+    busy = false; peopleSig = '';
+    if (ok) toast(`${ok} foto(s) enviada(s). O reconhecimento passa a usá-las em ~30 s.`);
+    loadPeople();
+  }
+
+  async function peopleCall(path, body, okMsg) {
+    try { await post(path, body); if (okMsg) toast(okMsg); peopleSig = ''; editing = null; loadPeople(); return true; }
+    catch (e) { toast('Não foi possível: ' + e.message); return false; }
+  }
+
+  $('pNewBtn').onclick = async () => {
+    const nome = $('pNewName').value.trim();
+    if (!nome) return toast('Digite o nome da pessoa.');
+    if (await peopleCall('/api/people', { nome, obs: $('pNewObs').value.trim() }, `${nome} cadastrada. Agora envie as fotos.`)) { $('pNewName').value = ''; $('pNewObs').value = ''; }
+  };
+  $('peopleList').addEventListener('click', async (ev) => {
+    const card = ev.target.closest('.pc'); if (!card) return;
+    const slug = card.dataset.slug, person = people.find((p) => p.slug === slug);
+    if (ev.target.closest('[data-open]')) {
+      const items = person.photos.map((f) => ({ src: `/face/${encodeURIComponent(slug)}/${encodeURIComponent(f.file)}`, cap: `${person.nome} — ${f.file}` }));
+      return openBox(items, person.photos.findIndex((f) => f.file === ev.target.closest('.fc').dataset.file));
+    }
+    const b = ev.target.closest('[data-pact]'); if (!b) return;
+    const act = b.dataset.pact;
+    if (act === 'edit') { editing = slug; renderPeople(); }
+    else if (act === 'cancel') { editing = null; renderPeople(); }
+    else if (act === 'save') {
+      const q = (f) => card.querySelector(`[data-f="${f}"]`).value.trim();
+      peopleCall('/api/people', { slug, nome: q('nome'), obs: q('obs') }, 'Dados salvos.');
+    } else if (act === 'delphoto') {
+      if (await ask('Remover esta foto do cadastro?')) peopleCall('/api/people/delete-photo', { slug, file: ev.target.closest('.fc').dataset.file }, 'Foto removida.');
+    } else if (act === 'del') {
+      if (await ask(`Excluir ${person.nome} e as ${person.photos.length} foto(s)? A pessoa deixa de ser reconhecida. As fotos antigas nas Gravações continuam.`)) peopleCall('/api/people/delete', { slug }, `${person.nome} excluída.`);
+    }
+  });
+  $('peopleList').addEventListener('change', (ev) => {
+    if (ev.target.type !== 'file') return;
+    uploadFiles(ev.target.closest('.pc').dataset.slug, ev.target.files); ev.target.value = '';
+  });
+  for (const t of ['dragover', 'dragenter']) $('peopleList').addEventListener(t, (ev) => { const z = ev.target.closest('.dropz'); if (z) { ev.preventDefault(); z.classList.add('over'); } });
+  for (const t of ['dragleave', 'drop']) $('peopleList').addEventListener(t, (ev) => { const z = ev.target.closest('.dropz'); if (z) z.classList.remove('over'); });
+  $('peopleList').addEventListener('drop', (ev) => {
+    const z = ev.target.closest('.dropz'); if (!z) return;
+    ev.preventDefault(); uploadFiles(z.closest('.pc').dataset.slug, ev.dataTransfer.files);
+  });
+
+  // ---------- carros ----------
+  let carsData = { settings: {}, cars: [], captures: [], state: null }, carsTimer = null, carsSig = '', carDraft = null, carDrag = null, carsFormLoaded = false;
+
+  async function loadCars() {
+    clearTimeout(carsTimer);
+    const d = await fetch('/api/cars').then((r) => r.json()).catch(() => null);
+    if (d) { carsData = d; renderCarsLive(); const sig = JSON.stringify([d.cars, d.captures, d.settings]); if (sig !== carsSig && !document.activeElement.closest('#carsList, #carCaptures')) { carsSig = sig; renderCarsLists(); } }
+    const im = new Image();
+    im.onload = () => { $('carSnap').src = im.src; drawCarZone(); };
+    im.src = '/gate/latest.jpg?t=' + Date.now();
+    if (view === 'cars') carsTimer = setTimeout(loadCars, 3000);
+  }
+
+  function renderCarsLive() {
+    const st = carsData.state, s = carsData.settings;
+    if (!carsFormLoaded) { $('cStop').value = s.stopSec ?? 20; $('cThr').value = s.threshold ?? 0.4; $('cUnk').checked = !!s.alertUnknown; carsFormLoaded = true; }
+    const nameOf = (e) => e.nome || 'carro não cadastrado';
+    const scoreTxt = (sc) => Object.entries(sc || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v.toFixed(2)}`).join(' · ');
+    const thr = s.threshold ?? 0.4;
+    if (!st) $('carNow').textContent = 'Aguardando o analyzer…';
+    else if (!st.zoneSet) $('carNow').innerHTML = '<span class="mutedc">Marque a garagem na imagem e salve para ativar.</span>';
+    else if (!st.cars.length && !st.unknown.length) $('carNow').innerHTML = '<span class="mutedc">Nenhum carro cadastrado com fotos. Capture e cadastre um carro abaixo.</span>';
+    else $('carNow').innerHTML = st.cars.map((c) => `<div>${c.present ? '<span class="okc">●</span>' : '<span class="mutedc">○</span>'} <b>${esc(c.nome)}</b> — ${c.present ? 'na garagem' : 'fora da garagem'}<br><small class="mutedc">nota ${Number(c.score).toFixed(2)} (presente a partir de ${thr})</small></div>`).join('')
+      + st.unknown.map((u) => `<div><span style="color:#ff8c00">●</span> <b>carro não cadastrado</b> — ${u.parked ? 'parado' : 'andando/parando'}</div>`).join('');
+    $('carEvents').innerHTML = st && st.events.length ? st.events.slice(0, 6).map((e) => `<div>${new Date(e.at * 1000).toLocaleTimeString('pt-BR')} — ${esc(e.nome || 'carro não cadastrado')} ${e.kind === 'parou' ? 'parou' : 'saiu'}${e.score != null ? ` <small class="mutedc">(nota ${Number(e.score).toFixed(2)})</small>` : ''}</div>`).join('') : '<span class="mutedc">Nenhum evento ainda.</span>';
+    if (st && st.lastCommand && st.lastCommand.at > (renderCarsLive.last || 0)) {
+      if (renderCarsLive.last) { toast((st.lastCommand.ok ? '✓ ' : '✕ ') + st.lastCommand.msg); carsSig = ''; }
+      renderCarsLive.last = st.lastCommand.at;
+    }
+    drawCarZone();
+  }
+
+  function renderCarsLists() {
+    const cars = carsData.cars;
+    $('carsList').innerHTML = cars.length ? cars.map((c) => `
+      <div class="gcard pc" data-slug="${esc(c.slug)}" style="background:#181818">
+        <div class="phead"><div><b class="pname">${esc(c.nome)}</b> <small class="mutedc">(${esc(c.slug)}) · ${c.photos.length} foto${c.photos.length === 1 ? '' : 's'}</small></div><button class="btn bad" data-cact="del">Excluir carro</button></div>
+        <label class="grow">Avisar quando parar na garagem <input type="checkbox" data-cf="alertOnPark" ${c.alertOnPark ? 'checked' : ''}></label>
+        <label class="grow">Avisar quando sair da garagem <input type="checkbox" data-cf="alertOnLeave" ${c.alertOnLeave ? 'checked' : ''}></label>
+        ${c.photos.length ? '' : '<div class="warn">Sem fotos: capture da câmera para o carro poder ser reconhecido.</div>'}
+        <div class="faces">${c.photos.map((f) => `<div class="fc" data-file="${esc(f)}"><button class="th" data-open><img loading="lazy" src="/car/${encodeURIComponent(c.slug)}/${encodeURIComponent(f)}" alt=""></button><div class="row"><button class="btn bad" data-cact="delphoto" title="Remover foto">✕</button></div></div>`).join('')}</div>
+      </div>`).join('') : '<div class="mutedc" style="padding:8px 0">Nenhum carro cadastrado.</div>';
+    const opts = cars.map((c) => `<option value="${esc(c.slug)}">${esc(c.nome)}</option>`).join('');
+    $('carCaptures').innerHTML = carsData.captures.length ? carsData.captures.map((f) => `
+      <div class="fc" data-file="${esc(f)}"><button class="th" data-open><img src="/car/_capturas/${encodeURIComponent(f)}" alt=""></button>
+        <div class="row col"><select class="tgt" data-csel><option value="">Qual carro?</option>${opts}<option value="__new">Novo carro…</option></select>
+          <input class="tgt" data-cname placeholder="Nome do carro" hidden maxlength="60">
+          <div style="display:flex;gap:6px"><button class="btn ok" data-cact="assign" style="flex:1">Cadastrar</button><button class="btn bad" data-cact="discard" title="Descartar">✕</button></div></div></div>`).join('')
+      : '<div class="mutedc">Nenhuma captura pendente.</div>';
+  }
+
+  // zona da garagem: desenhar com o mouse/dedo
+  function drawCarZone() {
+    const c = $('carCv'); c.width = c.clientWidth; c.height = c.clientHeight;
+    const g = c.getContext('2d');
+    const box = (r, color, fill, dash, w = 2) => { g.setLineDash(dash ? [6, 4] : []); g.lineWidth = w; g.strokeStyle = color; g.fillStyle = fill; if (fill) g.fillRect(r.x * c.width, r.y * c.height, r.w * c.width, r.h * c.height); g.strokeRect(r.x * c.width, r.y * c.height, r.w * c.width, r.h * c.height); };
+    if (carsData.settings.garage) box(carsData.settings.garage, '#ffc400', 'rgba(255,196,0,.08)', true);
+    if (carDraft) box(carDraft, '#4da3ff', 'rgba(77,163,255,.2)', false);
+    const st = carsData.state || {};
+    for (const v of (st.cars || []).filter((c) => c.present && c.box)) box({ x: v.box[0], y: v.box[1], w: v.box[2] - v.box[0], h: v.box[3] - v.box[1] }, '#4cd964', null, false, 3);
+    for (const v of (st.unknown || []).filter((u) => u.box)) box({ x: v.box[0], y: v.box[1], w: v.box[2] - v.box[0], h: v.box[3] - v.box[1] }, '#ff8c00', null, false, 3);
+  }
+  const carRel = (ev) => { const b = $('carCv').getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (ev.clientX - b.left) / b.width)), y: Math.min(1, Math.max(0, (ev.clientY - b.top) / b.height)) }; };
+  const carDragTo = (ev) => { if (!carDrag) return; const p = carRel(ev); carDraft = { x: Math.min(carDrag.x, p.x), y: Math.min(carDrag.y, p.y), w: Math.abs(p.x - carDrag.x), h: Math.abs(p.y - carDrag.y) }; drawCarZone(); };
+  $('carCv').addEventListener('pointerdown', (ev) => { carDrag = carRel(ev); $('carCv').setPointerCapture(ev.pointerId); });
+  $('carCv').addEventListener('pointermove', carDragTo);
+  $('carCv').addEventListener('pointerup', (ev) => { carDragTo(ev); carDrag = null; if (carDraft && (carDraft.w < 0.03 || carDraft.h < 0.03)) { carDraft = null; drawCarZone(); } });
+  addEventListener('resize', () => { if (view === 'cars') drawCarZone(); });
+
+  async function carsCall(path, body, okMsg) {
+    try { const r = await post(path, body); if (okMsg) toast(okMsg); carsSig = ''; loadCars(); return r; }
+    catch (e) { toast('Não foi possível: ' + e.message); return null; }
+  }
+  $('carZoneClear').onclick = () => { carDraft = null; drawCarZone(); };
+  $('carZoneSave').onclick = async () => {
+    if (!carDraft) return toast('Arraste sobre a imagem para marcar a garagem primeiro.');
+    if (await carsCall('/api/cars/config', { garage: carDraft }, 'Garagem salva.')) carDraft = null;
+  };
+  $('carZoneRemove').onclick = async () => { if (await ask('Remover a zona da garagem? O monitor de carros fica desligado até você marcar outra.')) carsCall('/api/cars/config', { garage: null }, 'Zona removida.'); };
+  $('cSave').onclick = () => carsCall('/api/cars/config', { stopSec: +$('cStop').value, threshold: +$('cThr').value, alertUnknown: $('cUnk').checked }, 'Ajustes salvos.');
+  $('cCapture').onclick = async () => { if (await carsCall('/api/cars/capture', {}, 'Capturando… (até 4 s)')) setTimeout(loadCars, 5000); };
+  $('cNewBtn').onclick = async () => {
+    const nome = $('cNewName').value.trim();
+    if (!nome) return toast('Digite o nome do carro.');
+    if (await carsCall('/api/cars/save', { nome }, `${nome} criado. Capture a foto na garagem.`)) $('cNewName').value = '';
+  };
+
+  document.querySelector('#cars').addEventListener('click', async (ev) => {
+    const card = ev.target.closest('.pc'), fc = ev.target.closest('.fc');
+    if (ev.target.closest('[data-open]') && fc) {
+      const grid = fc.closest('.faces');
+      const items = [...grid.querySelectorAll('.fc')].map((x) => ({ src: x.querySelector('img').src, cap: 'Carro' }));
+      return openBox(items, [...grid.querySelectorAll('.fc')].indexOf(fc));
+    }
+    const b = ev.target.closest('[data-cact]'); if (!b) return;
+    const act = b.dataset.cact;
+    if (act === 'del') {
+      const c = carsData.cars.find((x) => x.slug === card.dataset.slug);
+      if (await ask(`Excluir ${c.nome} e as ${c.photos.length} foto(s)?`)) carsCall('/api/cars/delete', { slug: c.slug }, `${c.nome} excluído.`);
+    } else if (act === 'delphoto') {
+      if (await ask('Remover esta foto do carro?')) carsCall('/api/cars/delete-photo', { slug: card.dataset.slug, file: fc.dataset.file }, 'Foto removida.');
+    } else if (act === 'discard') carsCall('/api/cars/discard', { file: fc.dataset.file });
+    else if (act === 'assign') {
+      const sel = fc.querySelector('[data-csel]').value, nome = fc.querySelector('[data-cname]').value.trim();
+      if (!sel) return toast('Escolha o carro, ou "Novo carro…".');
+      if (sel === '__new' && !nome) return toast('Digite o nome do novo carro.');
+      carsCall('/api/cars/assign', sel === '__new' ? { file: fc.dataset.file, nome } : { file: fc.dataset.file, slug: sel }, 'Foto adicionada ao carro.');
+    }
+  });
+  document.querySelector('#cars').addEventListener('change', (ev) => {
+    if (ev.target.matches('[data-csel]')) fc_toggle(ev.target);
+    else if (ev.target.matches('[data-cf]')) {
+      const card = ev.target.closest('.pc'); carsCall('/api/cars/save', { slug: card.dataset.slug, [ev.target.dataset.cf]: ev.target.checked });
+    }
+  });
+  const fc_toggle = (sel) => { sel.closest('.fc').querySelector('[data-cname]').hidden = sel.value !== '__new'; };
+
+  route();
+</script>
+</body>
+</html>

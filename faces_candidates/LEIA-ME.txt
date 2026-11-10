@@ -1,0 +1,13 @@
+Rostos coletados automaticamente pelo analyzer, para você revisar. Esta pasta NÃO é usada no reconhecimento.
+
+  faces_candidates/ph/          -> rostos que o sistema reconheceu como "ph"
+  faces_candidates/_desconhecida/ -> rostos que não bateram com ninguém cadastrado
+
+Como usar:
+  1. Abra as fotos e confira se a pessoa está certa.
+  2. Boas fotos: mova (ou copie) para faces/<nome>/  — ex.: faces/ph/. O analyzer recarrega sozinho em ~30 s.
+     Para uma pessoa nova: crie faces/<nome>/ e mova as fotos dela de _desconhecida.
+  3. Fotos ruins ou da pessoa errada: apague.
+
+Só entram rostos de frente, nítidos e com pelo menos 60 px, e que não sejam quase iguais a outros já guardados.
+Limites: 3 por passagem e 30 pendentes por pessoa (apagar ou mover libera espaço).

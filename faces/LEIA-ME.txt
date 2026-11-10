@@ -1,0 +1,7 @@
+Uma subpasta por pessoa, com 5 a 10 fotos do rosto (de frente, boa luz, variando um pouco o ambiente):
+
+  faces/paulo/1.jpg
+  faces/paulo/2.jpg
+  faces/maria/1.jpg
+
+O analyzer recarrega esta pasta sozinho (a cada ~30 s) quando ela muda.

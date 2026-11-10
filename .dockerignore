@@ -1,0 +1,15 @@
+config.json
+config.example.json
+node_modules
+Dockerfile
+docker-compose.yml
+analyzer
+faces
+faces_candidates
+gate
+.env
+waha_sessions
+__pycache__
+tailscale_state
+tailscale.env
+cars
