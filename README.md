@@ -86,6 +86,7 @@ Este documento é a referência de operação. Para **instalar em outro computad
 camera-viewer/
 ├── GUIA-INSTALACAO.md        # passo a passo para instalar em outro computador
 ├── docker-compose.yml        # os 3 serviços (viewer, analyzer, waha)
+├── docker-compose.imagens.yml # complemento: usa as imagens prontas do ghcr.io em vez de construir (./setup.sh --imagens)
 ├── Dockerfile                # imagem do painel (Node 22 + ffmpeg)
 ├── server.js                 # servidor do painel: API, login
 ├── camera-registry.js        # cadastro de câmeras (cameras.json), endereços RTSP por marca, migração
@@ -186,6 +187,8 @@ Preencha `alerts.whatsappPhone` (telefone que **recebe**, formato `+55DDDNÚMERO
 docker compose up -d --build
 ```
 
+Ou, sem construir nada, com as **imagens prontas** publicadas no ghcr.io (rode antes `./setup.sh --imagens`): `docker compose pull && docker compose up -d`. As imagens não levam segredos; veja a [seção 4.5](#45-imagens-prontas-ghcrio).
+
 A primeira vez demora (baixa PyTorch, os modelos YOLO/YuNet/SFace e a imagem do WAHA; alguns GB). Acompanhe com `docker compose logs -f`.
 
 **6. Conecte o WhatsApp** (uma vez só por servidor; cada servidor tem a **sua** sessão e a **sua** chave `WAHA_API_KEY`):
@@ -231,12 +234,21 @@ A primeira vez demora (baixa PyTorch, os modelos YOLO/YuNet/SFace e a imagem do 
 
 ```bash
 ./setup.sh                      # só cria o que faltar (a pasta cameras/, por exemplo); não mexe no que já existe
-docker compose up -d --build
+docker compose up -d --build     # ou, com imagens prontas: docker compose pull && docker compose up -d
 ```
 
 reconstrói só o que mudou. As imagens base e o ultralytics não estão com versão fixa; se quiser reprodutibilidade total, fixe as versões em `analyzer/requirements.txt` e na linha `image:` do WAHA.
 
 **Atualizando uma instalação de UMA câmera (versão antiga):** nada a fazer além dos comandos acima. Na primeira subida, o painel cadastra a câmera do `config.json` como **"Câmera 1"** (renomeie na aba Câmeras; o apelido pode mudar, a pasta continua `camera-1`) e o analyzer **move** as fotos, o portão, a garagem e os carros antigos para as pastas dela (`cameraImages/camera-1/`, `gate/camera-1/`, `cars/camera-1/`). O telefone escolhido na aba Alertas passa a valer para todas as câmeras. É um `mv` dentro do mesmo disco, não copia as fotos. Depois disso o `rtspUrl` do `config.json` não é mais usado e pode ser apagado.
+
+### 4.5. Imagens prontas (ghcr.io)
+
+O workflow `.github/workflows/publish.yml` constrói o painel (`camera-viewer-painel`) e o analyzer (`camera-viewer-analyzer`) e os publica em `ghcr.io/<dono>/`. Ele roda ao criar uma tag de versão (`git tag v1.0.0 && git push origin v1.0.0`) ou manualmente na aba **Actions**. As imagens são só para **x86 (amd64)**.
+
+- **Segredos ficam de fora:** `config.json`, `.env`, `cameras/` e `waha_sessions/` são montados em cada computador pelo compose; a sessão do WhatsApp é lida por QR code em cada máquina.
+- **Quem usa:** `./setup.sh --imagens` (grava `COMPOSE_FILE=docker-compose.yml:docker-compose.imagens.yml` no `.env`), `docker compose pull`, `docker compose up -d`. Variáveis opcionais no `.env`: `CAMERA_VIEWER_REGISTRY` (padrão `ghcr.io/paulohen`) e `CAMERA_VIEWER_TAG` (padrão `latest`).
+- **Pacotes públicos:** o ghcr.io cria os pacotes como privados. Torne-os públicos (Packages ▸ Package settings ▸ Visibility) ou faça `docker login ghcr.io` com um token `read:packages` em cada computador.
+- **Sem registro:** `docker save` nas imagens, copie o arquivo e `docker load` no outro computador.
 
 ---
 

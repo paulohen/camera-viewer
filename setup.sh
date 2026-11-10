@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Prepara uma instalação nova (ou atualiza uma antiga): cria as pastas, o .env (com chaves aleatórias) e o config.json.
 # Não sobrescreve nada que já exista, então é seguro rodar de novo. As câmeras NÃO são pedidas aqui: cadastre-as no painel (aba Câmeras).
-# Uso: ./setup.sh
+# Uso: ./setup.sh             (constrói as imagens no próprio computador)
+#      ./setup.sh --imagens   (usa as imagens prontas do ghcr.io: sem construir, bem mais rápido; veja docker-compose.imagens.yml)
 set -euo pipefail
 cd "$(dirname "$0")"
+IMAGENS=0
+[ "${1:-}" = "--imagens" ] && IMAGENS=1
 
 command -v docker >/dev/null || { echo "Docker não encontrado. Instale o Docker e o Docker Compose v2 primeiro."; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "'docker compose' (v2) não encontrado."; exit 1; }
@@ -31,6 +34,15 @@ else
   echo ".env já existe: mantido."
 fi
 
+if [ "$IMAGENS" = 1 ]; then
+  if ! grep -q '^COMPOSE_FILE=' .env; then
+    printf '\n# usa as imagens prontas em vez de construir (docker-compose.imagens.yml)\nCOMPOSE_FILE=docker-compose.yml:docker-compose.imagens.yml\n' >> .env
+    echo "Modo imagens prontas ativado no .env (COMPOSE_FILE)."
+  else
+    echo "COMPOSE_FILE já está no .env: mantido."
+  fi
+fi
+
 if [ ! -f config.json ]; then
   read -rp "Telefone que recebe os alertas, com DDI e DDD (ex.: +5511999999999), ou Enter para deixar em branco: " PHONE
   PHONE="$PHONE" KEY="$(grep '^WAHA_API_KEY=' .env | cut -d= -f2-)" python3 -I - <<'PY'
@@ -52,8 +64,10 @@ cat <<'MSG'
 
 Pronto. Próximos passos:
   1. docker compose up -d --build        (a primeira vez baixa alguns GB)
-  2. Abra http://localhost:3000/dashboard e leia o QR code com o WhatsApp que vai ENVIAR os alertas
-  3. ./set-password.sh                   (protege o painel com usuário e senha)
-  4. Abra http://localhost:8090 (ou http://IP-DESTA-MAQUINA:8090) e cadastre as câmeras na aba "Câmeras"
-     (IP, usuário, senha e um apelido para cada uma). Depois: rostos, portão e carros (veja o GUIA-INSTALACAO.md)
+     (com --imagens:  docker compose pull && docker compose up -d)
+  2. ./set-password.sh                   (protege o painel com usuário e senha)
+  3. Abra http://localhost:8090 (ou http://IP-DESTA-MAQUINA:8090), aba "Alertas", e leia o QR code com o
+     WhatsApp que vai ENVIAR os alertas
+  4. Na aba "Câmeras", cadastre cada câmera (IP, usuário, senha e um apelido).
+     Depois: rostos, portão e carros (veja o GUIA-INSTALACAO.md)
 MSG

@@ -1,0 +1,55 @@
+name: Publicar imagens
+
+# Constrói as imagens do painel e do analyzer e publica no GitHub Container Registry (ghcr.io).
+# Roda ao criar uma tag de versão (ex.: git tag v1.0.0 && git push origin v1.0.0) ou manualmente (Actions > Publicar imagens).
+# As imagens NÃO levam segredos: config.json, .env, cameras/ e waha_sessions/ são montados em cada computador.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    name: Imagem ${{ matrix.nome }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: camera-viewer-painel
+            contexto: .
+          - nome: camera-viewer-analyzer
+            contexto: ./analyzer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nome da imagem (o ghcr.io exige minúsculas)
+        run: echo "IMAGEM=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.nome }}" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGEM }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+            type=sha
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexto }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
